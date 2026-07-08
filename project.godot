@@ -12,12 +12,27 @@ config_version=5
 
 config/name="ScrollFatigue"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/bg_color=Color(0.3372549, 0.3529412, 0.45882353, 1)
 config/icon="res://icon.svg"
+
+[autoload]
+
+StateMachine="*uid://dyt44ge1iqsy2"
+SessionData="*uid://c1og2abx2thqo"
+ExternalBridge="*uid://5g1q0yhnn6h5"
+ContentLibrary="*uid://dvu6xqtl465t"
 
 [display]
 
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/mode=3
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/GDQuest_GDScript_formatter/plugin.cfg")
 
 [physics]
 
@@ -28,3 +43,4 @@ window/stretch/aspect="expand"
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.05882353, 0.05882353, 0.105882354, 1)

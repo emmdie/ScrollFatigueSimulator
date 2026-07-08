@@ -19,6 +19,15 @@ The flow from a user experience point of view is:
 4. Reverting
 - Once the printout is done, the software should revert to the initial state for the next person
 
+## Implementation Status (read second, right after §0)
+
+- **Built:** `feed/post_card.tscn` + `post_card.gd`, `feed/feed.tscn` + `feed.gd`.
+- **Not built yet:** `content_library.gd`, `session_data.gd`, `state_machine.gd`, `external_bridge.gd`, `dwell_tracker.gd`, `prompt_finger.tscn/.gd`, everything under `framing/`, everything under `printing/`, the shaders themselves.
+- `feed.gd` was written *against assumed autoload APIs* (`ContentLibrary`, `SessionData`) since those didn't exist yet. **§1a below is the actual contract — implement `content_library.gd` and `session_data.gd` to match it exactly**, or update `feed.gd` if you change the shape.
+- `feed.gd` deliberately does **not** read `StateMachine` or drive it. It only exposes `set_scroll_locked(bool)`, `reset()`, and two signals (`nearest_card_changed`, `first_interaction`). Whatever owns dwell detection / framing / the FSM is expected to call into Feed, not the other way around. Don't add a dependency from Feed back to StateMachine — see §2a.
+- The `SCROLLING` vs `DISTORTING` states in §3 don't correspond to any branching inside `feed.gd` — Feed always tracks velocity/fatigue/per-card distortion continuously regardless of global state, it just stops doing so when `scrolling_locked` is true. Those two FSM states exist for whoever drives frame-level escalation (phone_frame → picture_frame), not for Feed itself.
+- `post_card.gd` needed a fix: the original draft declared `_distort_material` but never assigned it, so `set_distortion()` was a silent no-op. Fixed by adding a `CanvasGroup` (`distort_group`) wrapping the card's contents in `post_card.tscn`, with the `ShaderMaterial` created in `_ready()` and assigned to that group — this also gives "text distorts along with the image" for free, since the CanvasGroup flattens its subtree to one texture before the shader runs. **`shaders/image_distort.gdshader` does not exist yet** — `post_card.gd` will error on `_ready()` until it's created; it needs a `distortion` (0.0–1.0) shader parameter.
+
 ## 0. Structural Conventions (read first, future agents)
 
 - **Scene-adjacent scripts, no `scripts/` folder.** Every `.tscn` has a sibling `.gd` of the same name in the same folder (`feed.tscn` + `feed.gd`). A script that has no scene (pure logic, e.g. `horoscope_client.gd`) lives in the folder of the domain that owns it, not in a shared dumping ground.
@@ -42,12 +51,18 @@ res://
 │   └── main.gd
 │
 ├── feed/                      # everything that lives INSIDE the SubViewport
-│   ├── feed.tscn              # scroll container of post_card instances (fixed portrait resolution, e.g. 1080x1920)
-│   ├── feed.gd                # scroll input, velocity tracking, fatigue accumulation, distortion mapping to cards
-│   ├── post_card.tscn         # image + title + author, exposes a "distortion" shader param (0..1)
-│   ├── post_card.gd
-│   ├── dwell_tracker.gd       # plain Node child of feed.tscn; per-post timer with forgiveness window, emits focus signals
-│   ├── prompt_finger.tscn     # idle swipe animation, fades out permanently on first input
+│   ├── feed.tscn              # ✅ built. Feed (Control) > CardContainer (Control) + PromptFinger (last child)
+│   ├── feed.gd                # ✅ built. Recycled pool of pool_size post_cards, drag/momentum scroll,
+│   │                          #   fatigue accumulation, per-card distortion, nearest-card signal. See §1a.
+│   ├── post_card.tscn         # ✅ built. Root Control > BackgroundColor, DistortGroup (CanvasGroup) > VBoxContainer
+│   │                          #   (CaptionBox w/ Artistlabel+ArtworkLabel, separator ColorRect, ArtworkRect)
+│   ├── post_card.gd           # ✅ built. setup(artist,title,texture), set_distortion(0..1) via distort_group's material
+│   ├── dwell_tracker.gd       # ⬜ not built. Plain Node child of feed.tscn; NOT told about post changes by polling —
+│   │                          #   listen to Feed.nearest_card_changed(post_card, artwork_data) instead. On sustained
+│   │                          #   stillness past dwell_threshold, call feed.set_scroll_locked(true) and signal
+│   │                          #   whoever owns focus_frame/StateMachine to transition to FOCUSING.
+│   ├── prompt_finger.tscn     # ⬜ not built. Idle swipe animation. Feed calls prompt_finger.dismiss() on first input
+│   │                          #   and prompt_finger.reset() on Feed.reset() — implement both methods.
 │   └── prompt_finger.gd
 │
 ├── framing/                   # everything that presents the SubViewport in a context
@@ -73,7 +88,9 @@ res://
 │   └── horoscope_client.gd    # no scene; builds prompt from ArtworkData tags, calls external_bridge, parses JSON reply
 │
 ├── shaders/                   # shaders are shared visual assets, referenced by feed/ and framing/
-│   ├── image_distort.gdshader # wave/pixelate/chromatic-aberration, driven by uniform 0..1 (per post_card)
+│   ├── image_distort.gdshader # ⬜ not built — REQUIRED for post_card.gd to run. Must expose a float
+│   │                          #   shader_parameter named "distortion" (0..1). Applied to post_card's
+│   │                          #   DistortGroup (a CanvasGroup), so it runs on the flattened image+text texture.
 │   ├── text_distort.gdshader  # applied to a viewport-rendered text texture or via RichTextEffect
 │   └── feed_distort.gdshader  # optional: applied to the SubViewport texture itself for whole-feed effects
 │
@@ -113,6 +130,26 @@ res://
 - `content_library.gd` validates the manifest on startup (missing files, duplicate ids, empty tags) and logs problems instead of crashing; a broken entry is skipped, the exhibit keeps running.
 - Optional fields can be added later (e.g. `credit`, `palette_hint`) without breaking older code — parse defensively, ignore unknown keys.
 
+## 1a. Autoload Contract Required by `feed.gd` (implement to match, or edit feed.gd)
+
+`feed.gd` is already written and calls these directly (no null/has-method guards), so `content_library.gd` and `session_data.gd` must match this shape or the feed will error at runtime:
+
+```gdscript
+# ContentLibrary (autoload)
+func get_artwork_count() -> int
+func get_artwork(order_index: int) -> Dictionary   # {id, title, artist, tags, ...} — NOT keyed by manifest "file"/id string,
+                                                     # Feed always passes a plain 0..count-1 index (see note below)
+func load_texture(artwork_data: Dictionary) -> Texture2D
+```
+```gdscript
+# SessionData (autoload)
+var fatigue: float   # Feed writes this every frame; other systems (frame_host escalation) should read it, not recompute it
+```
+
+Notes for whoever builds `content_library.gd`:
+- Feed maps its own infinite `logical_index` (can be negative, unbounded) to a manifest entry via `((logical_index % count) + count) % count`, then calls `get_artwork(order_index)`. This assumes `get_artwork` takes a **plain array-style index into your current shuffle order**, not the manifest's `id` string. If you'd rather key by `id`, either add a separate `get_shuffled_order() -> Array[int]` that Feed can consult, or change `_artwork_for_logical_index()` in `feed.gd` to go through it — flagging so the two aren't built to mismatching assumptions.
+- `reset()` on Feed rebuilds its whole pool from scratch (calls `get_artwork_count`/`get_artwork` again), so re-shuffling inside `content_library.gd` on REVERTING is enough — Feed doesn't need to be told the order changed, it'll just re-query it.
+
 ## 2. Framing: container-based, not camera-based
 
 **Decision: drop the Camera2D zoom rig. Render the feed into a fixed-resolution `SubViewport` and present it through a `SubViewportContainer` whose rect/scale is tweened by `frame_host.gd`. Frames are decoration scenes swapped around that container.**
@@ -131,6 +168,30 @@ Implementation notes / risks (validate these in an early spike, step 4 of the bu
 - `SubViewportContainer` forwards input and transforms event coordinates, but **verify touch/drag forwarding while the container is scaled and offset** (the phone-frame state). If it misbehaves, fall back to a `TextureRect` + manual `SubViewport.push_input()` with the inverse transform — isolate that in `frame_host.gd` so nothing else cares.
 - Focus mode is the same mechanism in reverse: tween the container's scale up and offset it so the dwelled post's rect fills the display, while `focus_frame` fades in its progress-bar chrome. No special "zoomed" feed state exists inside the feed itself; the feed only knows "scrolling locked yes/no".
 - During PhoneFrame the visitor still swipes on the physical (kiosk) screen; the shrunken feed must remain the touch target. Make the decoration mouse-filter `IGNORE` so it never eats input.
+
+## 2a. Feed's Public API (as built)
+
+Everything outside `feed/` should talk to Feed only through this surface:
+
+```gdscript
+# Called by dwell_tracker.gd (on dwell) and by frame_host.gd (during PRINTING).
+# Also cancels any in-progress drag when set to true.
+func set_scroll_locked(locked: bool) -> void
+
+# Called on REVERTING. Resets scroll position, velocity and fatigue to zero,
+# rebuilds the card pool from ContentLibrary (so a re-shuffle takes effect),
+# and tells prompt_finger to reset.
+func reset() -> void
+
+# Emitted whenever the post nearest the viewport center changes.
+# dwell_tracker.gd should listen to this rather than polling Feed's position math.
+signal nearest_card_changed(post_card: Control, artwork_data: Dictionary)
+
+# Emitted once, first time the user drags/touches the feed.
+signal first_interaction
+```
+
+`fatigue` itself isn't exposed as a getter on Feed — read `SessionData.fatigue` instead, since Feed writes there every frame (§1a).
 
 ## 3. Core State Machine
 
@@ -171,19 +232,17 @@ Godot itself should never block on network/serial I/O. `external_bridge.gd` is t
 - **Input forwarding through a scaled SubViewportContainer**: the one real risk of the container approach; spike it early (build order step 4) and quarantine any workaround inside `frame_host.gd`.
 - **Decoupling scroll speed from fatigue**: fast flicking should build fatigue faster than slow deliberate scrolling — track velocity, not just item count, so the piece rewards/punishes behavior meaningfully.
 - **Dwell detection UX**: needs a "forgiveness window" — brief pauses (checking a caption) shouldn't fully trigger focus mode; only sustained stillness should.
-- **Hardware reliability**: thermal printers are error-prone (paper out, connection drops). Plan a visible fallback state ("still printing…" retry logic, or a graceful timeout message) so a hardware failure doesn't hang PRINTING indefinitely.
 - **API latency variance**: you.com response time isn't guaranteed — timeout + fallback horoscope text (pre-written generic lines) if the call takes too long or fails, so the installation never dead-ends for a gallery visitor.
 - **Exported build + external assets**: both `external/` (scripts) and `content/` (artwork + manifest) live beside the exported executable; verify path resolution on the target machine, not just in the editor.
 - **Session reset integrity**: make sure REVERTING fully clears shader uniforms, timers, and thread state — leftover state from one visitor bleeding into the next is an easy bug in exhibit-style software that runs for days unattended.
-- **Unattended uptime**: since this runs at an exhibit, add a watchdog/auto-restart (e.g. wrapping the exported binary in a shell script that relaunches on crash) and log errors to a file for later review.
 
 ## 7. Suggested Build Order
 
-1. `content_library` + manifest loading (with executable-adjacent override) + feed showing real artworks, scroll input, prompt finger — no distortion yet.
-2. Image/text distortion shaders wired to a manually-tweaked debug slider.
-3. Fatigue accumulation from real scroll input, replacing the debug slider.
-4. **Framing spike**: SubViewport + SubViewportContainer, verify swipe input while scaled/offset, then build frame_host with phone_frame as the first decoration.
-5. Dwell detection + focus_frame transition (container scale-up onto the dwelled post).
+1. ~~`content_library` + manifest loading (with executable-adjacent override) + feed showing real artworks, scroll input, prompt finger — no distortion yet.~~ **Partially done**: `feed.gd`/`post_card.tscn` are built and expect the §1a contract, but `content_library.gd` and `prompt_finger.tscn/.gd` themselves still need to be written to match. Do these next — feed.tscn can't run at all without them.
+2. Image/text distortion shaders wired to a manually-tweaked debug slider. **Blocked on `shaders/image_distort.gdshader`** — `post_card.gd`'s `_ready()` already calls `load()` on it, so write the shader before testing the card scene at all. The "debug slider" can just be a Range node calling `post_card.set_distortion()` directly for isolated testing, separate from Feed's automatic fatigue-driven mapping.
+3. ~~Fatigue accumulation from real scroll input, replacing the debug slider.~~ **Done** — lives inside `feed.gd` (`_update_fatigue`), written directly against real drag/momentum input, not a debug slider. Writes to `SessionData.fatigue` (§1a) — build `session_data.gd` next so this has somewhere to land.
+4. **Framing spike**: SubViewport + SubViewportContainer, verify swipe input while scaled/offset, then build frame_host with phone_frame as the first decoration. Feed already exposes `set_scroll_locked()` for this to call during transitions (§2a) — frame_host doesn't need to reach into Feed's internals.
+5. Dwell detection + focus_frame transition (container scale-up onto the dwelled post). Build `dwell_tracker.gd` against `Feed.nearest_card_changed` (§2a) rather than polling card positions.
 6. External script plumbing via external_bridge (start with a mocked/local fake API and a print-to-log stub instead of the real printer) to validate the async threading model and the two-phase progress bar.
 7. Swap in real you.com API and real printer hardware.
-8. Reset/revert flow + exhibit hardening (crash recovery, timeouts, logging, path checks on the kiosk machine).
+8. Reset/revert flow + exhibit hardening (crash recovery, timeouts, logging, path checks on the kiosk machine). Note `Feed.reset()` already exists and does its part (§2a) — this step is about wiring it into `state_machine.gd`'s REVERTING handler alongside the rest.

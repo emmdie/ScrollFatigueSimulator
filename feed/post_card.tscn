@@ -1,0 +1,65 @@
+[gd_scene format=3 uid="uid://j0wrl4wmqi3o"]
+
+[ext_resource type="Script" uid="uid://cmh58sihq52lh" path="res://feed/post_card.gd" id="1_61lak"]
+[ext_resource type="Theme" uid="uid://pctnkok845xe" path="res://theme.tres" id="1_dof02"]
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_2oftg"]
+load_path = "res://.godot/imported/klimt_the_kiss.jpg-6158af4c9e9e304ab8d3e90672775629.ctex"
+
+[node name="PostCard" type="Control" unique_id=1742529279 node_paths=PackedStringArray("artist_label", "artwork_label", "artwork", "distort_group")]
+custom_minimum_size = Vector2(1080, 1000)
+clip_contents = true
+layout_mode = 3
+anchors_preset = 0
+offset_right = 1080.0
+offset_bottom = 1000.0
+theme = ExtResource("1_dof02")
+script = ExtResource("1_61lak")
+artist_label = NodePath("DistortGroup/VBoxContainer/CaptionBox/Artistlabel")
+artwork_label = NodePath("DistortGroup/VBoxContainer/CaptionBox/ArtworkLabel")
+artwork = NodePath("DistortGroup/VBoxContainer/ArtworkRect")
+distort_group = NodePath("DistortGroup")
+
+[node name="BackgroundColor" type="ColorRect" parent="." unique_id=1334358549]
+z_index = -1
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DistortGroup" type="CanvasGroup" parent="." unique_id=1610581124]
+
+[node name="VBoxContainer" type="VBoxContainer" parent="DistortGroup" unique_id=1321111613]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 800.0
+offset_bottom = 60.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CaptionBox" type="VBoxContainer" parent="DistortGroup/VBoxContainer" unique_id=256849945]
+layout_mode = 2
+
+[node name="Artistlabel" type="Label" parent="DistortGroup/VBoxContainer/CaptionBox" unique_id=1664513804]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3372549, 0.3529412, 0.45882353, 1)
+text = "Gustav Klimt"
+
+[node name="ArtworkLabel" type="Label" parent="DistortGroup/VBoxContainer/CaptionBox" unique_id=74685241]
+layout_mode = 2
+text = "The Kiss"
+
+[node name="ColorRect" type="ColorRect" parent="DistortGroup/VBoxContainer" unique_id=1117227177]
+custom_minimum_size = Vector2(800, 2)
+layout_mode = 2
+color = Color(0.3372549, 0.3529412, 0.45882353, 1)
+
+[node name="ArtworkRect" type="TextureRect" parent="DistortGroup/VBoxContainer" unique_id=606474531]
+layout_mode = 2
+size_flags_vertical = 3
+texture = SubResource("CompressedTexture2D_2oftg")
+expand_mode = 1
+stretch_mode = 5
