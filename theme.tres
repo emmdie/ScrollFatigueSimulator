@@ -3,3 +3,4 @@
 [resource]
 Label/colors/font_color = Color(0.05882353, 0.05882353, 0.105882354, 1)
 Label/font_sizes/font_size = 33
+Label/fonts/font = null
