@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://cqsx1ko3l3bme" path="res://feed/feed.gd" id="1_4aggq"]
 [ext_resource type="PackedScene" uid="uid://j0wrl4wmqi3o" path="res://feed/post_card.tscn" id="2_0toap"]
 [ext_resource type="Script" uid="uid://dxf2jwqvf21co" path="res://feed/dwell_tracker.gd" id="2_jmajd"]
+[ext_resource type="Script" uid="uid://d3g2edu0gn471" path="res://feed/prompt_finger.gd" id="4_vrtp8"]
+[ext_resource type="Texture2D" uid="uid://d06xlt0h3f38c" path="res://content/Cursor/Finger.png" id="5_wygsy"]
 
 [node name="Feed" type="Control" unique_id=215067885 node_paths=PackedStringArray("card_container")]
 custom_minimum_size = Vector2(1080, 1920)
@@ -21,3 +23,25 @@ script = ExtResource("2_jmajd")
 
 [node name="CardHolder" type="Control" parent="." unique_id=163781410]
 anchors_preset = 0
+
+[node name="PromptFinger" type="CenterContainer" parent="." unique_id=1453962506 node_paths=PackedStringArray("finger")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("4_vrtp8")
+finger = NodePath("Control/TextureRect")
+
+[node name="Control" type="Control" parent="PromptFinger" unique_id=513590446]
+layout_mode = 2
+
+[node name="TextureRect" type="TextureRect" parent="PromptFinger/Control" unique_id=1633513477]
+custom_minimum_size = Vector2(200, 143)
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+rotation = -1.9774086
+texture = ExtResource("5_wygsy")
+expand_mode = 1

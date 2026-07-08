@@ -27,12 +27,13 @@ The flow from a user experience point of view is:
   - `autoload/session_data.gd` — `fatigue` plus supporting session fields (`current_artwork`, `dwell_elapsed`, `has_interacted`, `last_horoscope_text`) and `reset()`.
   - `autoload/state_machine.gd` — the FSM itself, auto-escalating `SCROLLING → DISTORTING` off fatigue, with `request_*`/`notify_*` entry points for the not-yet-built systems that drive the rest of the flow.
   - `autoload/external_bridge.gd` — threaded, timeout-guarded wrappers around `horoscope_api.py`/`print_job.py` with fallback behavior.
-- **Not built yet:** `dwell_tracker.gd`, `prompt_finger.tscn/.gd`, everything under `framing/`, everything under `printing/`, the shaders themselves, and `main.tscn`/`main.gd`.
+  - `feed/prompt_finger.tscn` + `prompt_finger.gd` — looping up/down swipe tween on the finger `TextureRect`, plus `dismiss()`/`reset()` fade out/in. Wired into `feed.tscn` and called by `feed.gd` per §2a.
+- **Not built yet:** `dwell_tracker.gd`, everything under `framing/`, everything under `printing/`, the shaders themselves, and `main.tscn`/`main.gd`.
 - **Nothing currently calls into the four autoloads' event-driven entry points.** `StateMachine.notify_first_interaction()`, `.request_focus()`, `.cancel_focus()`, `.request_printing()`, `.request_revert()`, `.request_idle()`, and `ExternalBridge.request_horoscope()`/`.request_print()` all exist and are ready, but no scene wires Feed's signals or dwell/print completion into them yet. That wiring is `main.gd`'s and `dwell_tracker.gd`'s job — see §3 and §5.
-- `feed.gd` was written *against assumed autoload APIs* (`ContentLibrary`, `SessionData`); `content_library.gd` and `session_data.gd` now implement that contract exactly (§1a), so `feed.tscn` should run as-is once `prompt_finger.tscn/.gd` and `shaders/image_distort.gdshader` exist (see below).
+- `feed.gd` was written *against assumed autoload APIs* (`ContentLibrary`, `SessionData`); `content_library.gd` and `session_data.gd` now implement that contract exactly (§1a), so `feed.tscn` should run as-is once `shaders/image_distort.gdshader` exists (see below); `prompt_finger.tscn/.gd` is now built.
 - `feed.gd` deliberately does **not** read `StateMachine` or drive it. It only exposes `set_scroll_locked(bool)`, `reset()`, and two signals (`nearest_card_changed`, `first_interaction`). Whatever owns dwell detection / framing / the FSM is expected to call into Feed, not the other way around. Don't add a dependency from Feed back to StateMachine — see §2a.
 - The `SCROLLING` vs `DISTORTING` states in §3 don't correspond to any branching inside `feed.gd` — Feed always tracks velocity/fatigue/per-card distortion continuously regardless of global state, it just stops doing so when `scrolling_locked` is true. Those two FSM states exist for whoever drives frame-level escalation (phone_frame → picture_frame), not for Feed itself.
-- `post_card.gd` needed a fix: the original draft declared `_distort_material` but never assigned it, so `set_distortion()` was a silent no-op. Fixed by adding a `CanvasGroup` (`distort_group`) wrapping the card's contents in `post_card.tscn`, with the `ShaderMaterial` created in `_ready()` and assigned to that group — this also gives "text distorts along with the image" for free, since the CanvasGroup flattens its subtree to one texture before the shader runs. **`shaders/image_distort.gdshader` does not exist yet** — `post_card.gd` will error on `_ready()` until it's created; it needs a `distortion` (0.0–1.0) shader parameter.
+- `post_card.tscn` has no `CanvasGroup`. `ArtworkRect` (a `TextureRect`) carries a `ShaderMaterial` using `res://shaders/image_distort.gdshader` directly, assigned in the editor. `post_card.gd`'s `_ready()` reads `artwork.material` and caches it; `set_distortion()` sets the shader's `distortion` (0.0–1.0) parameter on it. Only the artwork image distorts; `Artistlabel`/`ArtworkLabel` are unaffected.
 
 ## 0. Structural Conventions (read first, future agents)
 
@@ -66,16 +67,19 @@ res://
 │   ├── feed.tscn               # ✅ built. Feed (Control) > CardContainer (Control) + PromptFinger (last child)
 │   ├── feed.gd                 # ✅ built. Recycled pool of pool_size post_cards, drag/momentum scroll,
 │   │                           #   fatigue accumulation, per-card distortion, nearest-card signal. See §1a.
-│   ├── post_card.tscn          # ✅ built. Root Control > BackgroundColor, DistortGroup (CanvasGroup) > VBoxContainer
-│   │                           #   (CaptionBox w/ Artistlabel+ArtworkLabel, separator ColorRect, ArtworkRect)
-│   ├── post_card.gd            # ✅ built. setup(artist,title,texture), set_distortion(0..1) via distort_group's material
+│   ├── post_card.tscn          # ✅ built. Root Control > BackgroundColor, VBoxContainer (CaptionBox w/
+│   │                           #   Artistlabel+ArtworkLabel, separator ColorRect, ArtworkRect); ArtworkRect
+│   │                           #   carries the ShaderMaterial (res://shaders/image_distort.gdshader).
+│   ├── post_card.gd            # ✅ built. setup(artist,title,texture), set_distortion(0..1) via the
+│   │                           #   ShaderMaterial pre-assigned to ArtworkRect.
 │   ├── dwell_tracker.gd        # ⬜ not built. Plain Node child of feed.tscn; NOT told about post changes by polling —
 │   │                           #   listen to Feed.nearest_card_changed(post_card, artwork_data) instead. On sustained
 │   │                           #   stillness past dwell_threshold, call feed.set_scroll_locked(true) and
 │   │                           #   StateMachine.request_focus(). On cancellation, StateMachine.cancel_focus().
-│   ├── prompt_finger.tscn      # ⬜ not built. Idle swipe animation. Feed calls prompt_finger.dismiss() on first input
-│   │                           #   and prompt_finger.reset() on Feed.reset() — implement both methods.
-│   └── prompt_finger.gd
+│   ├── prompt_finger.tscn      # ✅ built. CenterContainer > Control > TextureRect (finger).
+│   └── prompt_finger.gd        # ✅ built. Looping up/down position tween on the finger TextureRect (set_loops);
+│                               #   dismiss() kills the loop, fades modulate.a to 0, hides. reset() shows, resets
+│                               #   position/alpha, fades back in, restarts the loop.
 │
 ├── framing/                   # everything that presents the SubViewport in a context
 │   ├── frame_host.tscn        # owns the SubViewport (with feed.tscn inside) + a SubViewportContainer;
@@ -103,9 +107,9 @@ res://
 │                               #   listens for horoscope_ready, stores text into SessionData.last_horoscope_text
 │
 ├── shaders/                   # shaders are shared visual assets, referenced by feed/ and framing/
-│   ├── image_distort.gdshader # ⬜ not built — REQUIRED for post_card.gd to run. Must expose a float
-│   │                          #   shader_parameter named "distortion" (0..1). Applied to post_card's
-│   │                          #   DistortGroup (a CanvasGroup), so it runs on the flattened image+text texture.
+│   ├── image_distort.gdshader # ✅ built. Exposes a float shader_parameter named "distortion" (0..1).
+│   │                          #   Assigned directly to post_card's ArtworkRect (TextureRect); only the
+│   │                          #   image distorts, caption text does not.
 │   ├── text_distort.gdshader  # applied to a viewport-rendered text texture or via RichTextEffect
 │   └── feed_distort.gdshader  # optional: applied to the SubViewport texture itself for whole-feed effects
 │
@@ -268,7 +272,7 @@ Godot itself should never block on network/serial I/O. `external_bridge.gd` is t
 ## 6. Key Technical Challenges
 
 - **Distortion that reads as "fatigue" not "glitch"**: subtle shader work (slight chromatic aberration, softening, gentle wave warp) that intensifies smoothly rather than an obvious glitch-art effect. Fine-tune curve shape (ease-in, not linear) so early scrolling feels normal. *(Still open — shaders not built.)*
-- **Text distortion**: Godot's Label/RichTextLabel don't warp easily. Options: render text to a Viewport texture and apply the same shader as images, or use per-character transforms via `RichTextEffect`. *(Partially addressed structurally — `post_card.tscn`'s `DistortGroup` CanvasGroup flattens image+text into one texture before the shader runs, so text distorts "for free" once `image_distort.gdshader` exists; still open.)*
+- **Text distortion**: `Artistlabel`/`ArtworkLabel` are not distorted — the `ShaderMaterial` is only on `ArtworkRect`. Godot's Label/RichTextLabel don't warp easily; if text distortion is added later, options are rendering text to a Viewport texture and applying `text_distort.gdshader` (not yet built), or per-character transforms via `RichTextEffect`.
 - **Input forwarding through a scaled SubViewportContainer**: the one real risk of the container approach; spike it early (build order step 4) and quarantine any workaround inside `frame_host.gd`. *(Still open — framing/ not built.)*
 - **Decoupling scroll speed from fatigue**: fast flicking should build fatigue faster than slow deliberate scrolling — track velocity, not just item count, so the piece rewards/punishes behavior meaningfully. *(Done — lives in `feed.gd`'s `_update_fatigue`.)*
 - **Dwell detection UX**: needs a "forgiveness window" — brief pauses (checking a caption) shouldn't fully trigger focus mode; only sustained stillness should. *(Still open — `dwell_tracker.gd` not built.)*
@@ -278,8 +282,8 @@ Godot itself should never block on network/serial I/O. `external_bridge.gd` is t
 
 ## 7. Suggested Build Order
 
-1. `content_library` + manifest loading (with executable-adjacent override) + feed showing real artworks, scroll input, prompt finger — no distortion yet. **`content_library.gd` is done.** Still blocked on `prompt_finger.tscn/.gd` — `feed.tscn` references it but it doesn't exist yet.
-2. Image/text distortion shaders wired to a manually-tweaked debug slider. **Blocked on `shaders/image_distort.gdshader`** — `post_card.gd`'s `_ready()` already calls `load()` on it, so write the shader before testing the card scene at all. The "debug slider" can just be a Range node calling `post_card.set_distortion()` directly for isolated testing, separate from Feed's automatic fatigue-driven mapping.
+1. `content_library` + manifest loading (with executable-adjacent override) + feed showing real artworks, scroll input, prompt finger — no distortion yet. **Done** — `content_library.gd` and `prompt_finger.tscn/.gd` are both built; `feed.tscn` no longer has missing dependencies for this step.
+2. Image distortion shader wired to a manually-tweaked debug slider. **Done** — `shaders/image_distort.gdshader` is built and assigned as `ArtworkRect`'s `ShaderMaterial` directly in `post_card.tscn`; `post_card.gd` reads that material in `_ready()`, no `load()` call involved. The "debug slider" can just be a Range node calling `post_card.set_distortion()` directly for isolated testing, separate from Feed's automatic fatigue-driven mapping. Only the artwork image distorts; captions do not.
 3. Fatigue accumulation from real scroll input, replacing the debug slider. **Done** — lives inside `feed.gd` (`_update_fatigue`), writing to `SessionData.fatigue`, which **is now built** and ready to receive it.
 4. **Framing spike**: SubViewport + SubViewportContainer, verify swipe input while scaled/offset, then build frame_host with phone_frame as the first decoration. Feed already exposes `set_scroll_locked()` for this to call during transitions (§2a) — frame_host doesn't need to reach into Feed's internals.
 5. Dwell detection + focus_frame transition (container scale-up onto the dwelled post). Build `dwell_tracker.gd` against `Feed.nearest_card_changed` (§2a), calling `StateMachine.request_focus()`/`cancel_focus()` (§3) rather than polling card positions or reimplementing FSM logic.

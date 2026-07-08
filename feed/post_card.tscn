@@ -12,12 +12,12 @@ seamless = true
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_dof02"]
 shader = ExtResource("3_dof02")
 shader_parameter/scale = Vector2(40, 40)
-shader_parameter/distortion = 1.0
+shader_parameter/distortion = 0.02
 shader_parameter/fps = 4.0
 shader_parameter/noise = SubResource("NoiseTexture2D_dof02")
 
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_2oftg"]
-load_path = "res://.godot/imported/klimt_the_kiss.jpg-6158af4c9e9e304ab8d3e90672775629.ctex"
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_dof02"]
+load_path = "res://.godot/imported/woman_holding_a_balance.jpg-ea06f961dc0529703645d68c3c07b0c4.ctex"
 
 [node name="PostCard" type="Control" unique_id=1742529279 node_paths=PackedStringArray("artist_label", "artwork_label", "artwork")]
 custom_minimum_size = Vector2(1080, 1000)
@@ -65,10 +65,10 @@ color = Color(0.3372549, 0.3529412, 0.45882353, 1)
 
 [node name="ArtworkRect" type="TextureRect" parent="VBoxContainer" unique_id=606474531]
 material = SubResource("ShaderMaterial_dof02")
-custom_minimum_size = Vector2(1000, 1000)
+custom_minimum_size = Vector2(880, 894)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture = SubResource("CompressedTexture2D_2oftg")
+texture = SubResource("CompressedTexture2D_dof02")
 expand_mode = 1
 stretch_mode = 5
