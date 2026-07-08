@@ -1,54 +1,54 @@
 {
   "version": 1,
   "artworks": [
-    {
-      "id": "klimt_the_kiss",
-      "file": "artworks/klimt_the_kiss.jpg",
-      "title": "The Kiss",
-      "artist": "Gustav Klimt",
-      "date": "1907–1908",
-      "tags": [
-        "gold",
-        "romance",
-        "ornament",
-        "art nouveau",
-        "embrace",
+	{
+	  "id": "klimt_the_kiss",
+	  "file": "artworks/klimt_the_kiss.jpg",
+	  "title": "The Kiss",
+	  "artist": "Gustav Klimt",
+	  "date": "1907–1908",
+	  "tags": [
+		"gold",
+		"romance",
+		"ornament",
+		"art nouveau",
+		"embrace",
         "true classic"
-      ]
-    },
-    {
-      "id": "vermeer_pearl_earring",
-      "file": "vermeer_pearl_earring.jpg",
-      "title": "Girl with a Pearl Earring",
-      "artist": "Johannes Vermeer",
-      "date": "1665",
-      "tags": [
-        "true classic",
-        "Jewelry",
-        "Simple colors",
-        "Old art",
-        "Pearl",
-        "Everyone knows it",
+	  ]
+	},
+	{
+	  "id": "vermeer_pearl_earring",
+	  "file": "vermeer_pearl_earring.jpg",
+	  "title": "Girl with a Pearl Earring",
+	  "artist": "Johannes Vermeer",
+	  "date": "1665",
+	  "tags": [
+		"true classic",
+		"Jewelry",
+		"Simple colors",
+		"Old art",
+		"Pearl",
+		"Everyone knows it",
         "Matte Palette"
-      ]
-    },
-    {
-      "id": "woman_holding_a_balance",
-      "file": "artworks/woman_holding_a_balance.jpg",
-      "title": "Woman Holding a Balance",
-      "artist": "Johannes Vermeer",
-      "date": "1664",
-      "tags": [
-        "Baroque",
-        "Oil Painting",
-        "Jewelry",
-        "Lesser known Vermeer",
-        "Luxury",
-        "Pelts",
-        "Indulgence",
-        "Classic Painting",
+	  ]
+	},
+	{
+	  "id": "woman_holding_a_balance",
+	  "file": "artworks/woman_holding_a_balance.jpg",
+	  "title": "Woman Holding a Balance",
+	  "artist": "Johannes Vermeer",
+	  "date": "1664",
+	  "tags": [
+		"Baroque",
+		"Oil Painting",
+		"Jewelry",
+		"Lesser known Vermeer",
+		"Luxury",
+		"Pelts",
+		"Indulgence",
+		"Classic Painting",
         "Content"
-      ]
-    }
+	  ]
+	}
   ]
 }

@@ -21,9 +21,15 @@ The flow from a user experience point of view is:
 
 ## Implementation Status (read second, right after §0)
 
-- **Built:** `feed/post_card.tscn` + `post_card.gd`, `feed/feed.tscn` + `feed.gd`.
-- **Not built yet:** `content_library.gd`, `session_data.gd`, `state_machine.gd`, `external_bridge.gd`, `dwell_tracker.gd`, `prompt_finger.tscn/.gd`, everything under `framing/`, everything under `printing/`, the shaders themselves.
-- `feed.gd` was written *against assumed autoload APIs* (`ContentLibrary`, `SessionData`) since those didn't exist yet. **§1a below is the actual contract — implement `content_library.gd` and `session_data.gd` to match it exactly**, or update `feed.gd` if you change the shape.
+- **Built:**
+  - `feed/post_card.tscn` + `post_card.gd`, `feed/feed.tscn` + `feed.gd`
+  - `autoload/content_library.gd` — implements the §1a contract: manifest loading/validation, executable-adjacent content path resolution, shuffled run order, cached texture loading.
+  - `autoload/session_data.gd` — `fatigue` plus supporting session fields (`current_artwork`, `dwell_elapsed`, `has_interacted`, `last_horoscope_text`) and `reset()`.
+  - `autoload/state_machine.gd` — the FSM itself, auto-escalating `SCROLLING → DISTORTING` off fatigue, with `request_*`/`notify_*` entry points for the not-yet-built systems that drive the rest of the flow.
+  - `autoload/external_bridge.gd` — threaded, timeout-guarded wrappers around `horoscope_api.py`/`print_job.py` with fallback behavior.
+- **Not built yet:** `dwell_tracker.gd`, `prompt_finger.tscn/.gd`, everything under `framing/`, everything under `printing/`, the shaders themselves, and `main.tscn`/`main.gd`.
+- **Nothing currently calls into the four autoloads' event-driven entry points.** `StateMachine.notify_first_interaction()`, `.request_focus()`, `.cancel_focus()`, `.request_printing()`, `.request_revert()`, `.request_idle()`, and `ExternalBridge.request_horoscope()`/`.request_print()` all exist and are ready, but no scene wires Feed's signals or dwell/print completion into them yet. That wiring is `main.gd`'s and `dwell_tracker.gd`'s job — see §3 and §5.
+- `feed.gd` was written *against assumed autoload APIs* (`ContentLibrary`, `SessionData`); `content_library.gd` and `session_data.gd` now implement that contract exactly (§1a), so `feed.tscn` should run as-is once `prompt_finger.tscn/.gd` and `shaders/image_distort.gdshader` exist (see below).
 - `feed.gd` deliberately does **not** read `StateMachine` or drive it. It only exposes `set_scroll_locked(bool)`, `reset()`, and two signals (`nearest_card_changed`, `first_interaction`). Whatever owns dwell detection / framing / the FSM is expected to call into Feed, not the other way around. Don't add a dependency from Feed back to StateMachine — see §2a.
 - The `SCROLLING` vs `DISTORTING` states in §3 don't correspond to any branching inside `feed.gd` — Feed always tracks velocity/fatigue/per-card distortion continuously regardless of global state, it just stops doing so when `scrolling_locked` is true. Those two FSM states exist for whoever drives frame-level escalation (phone_frame → picture_frame), not for Feed itself.
 - `post_card.gd` needed a fix: the original draft declared `_distort_material` but never assigned it, so `set_distortion()` was a silent no-op. Fixed by adding a `CanvasGroup` (`distort_group`) wrapping the card's contents in `post_card.tscn`, with the `ShaderMaterial` created in `_ready()` and assigned to that group — this also gives "text distorts along with the image" for free, since the CanvasGroup flattens its subtree to one texture before the shader runs. **`shaders/image_distort.gdshader` does not exist yet** — `post_card.gd` will error on `_ready()` until it's created; it needs a `distortion` (0.0–1.0) shader parameter.
@@ -41,28 +47,34 @@ The flow from a user experience point of view is:
 ```
 res://
 ├── autoload/
-│   ├── state_machine.gd       # global FSM: IDLE, SCROLLING, DISTORTING, FOCUSING, PRINTING, REVERTING
-│   ├── session_data.gd        # tracks current post, scroll velocity, dwell timer, fatigue/distortion level
-│   ├── content_library.gd     # loads + validates manifest.json, hands out ArtworkData; sole owner of content paths
-│   └── external_bridge.gd     # OS.create_process()/Thread wrappers for printer + API helper scripts
+│   ├── state_machine.gd       # ✅ built. Global FSM: IDLE, SCROLLING, DISTORTING, FOCUSING, PRINTING, REVERTING.
+│   │                          #   Auto-escalates SCROLLING->DISTORTING off SessionData.fatigue; every other edge
+│   │                          #   is a request_*/notify_* method for other systems to call. See §3.
+│   ├── session_data.gd        # ✅ built. fatigue, scroll_velocity, has_interacted, current_artwork, dwell_elapsed,
+│   │                          #   last_horoscope_text, reset(). See §1a.
+│   ├── content_library.gd     # ✅ built. Loads + validates manifest.json, hands out ArtworkData, owns the shuffled
+│   │                          #   run order and texture cache; sole owner of content paths. See §1a, §4.
+│   └── external_bridge.gd     # ✅ built. Threaded OS.execute() wrappers for horoscope_api.py / print_job.py with
+│   │                          #   timeouts + fallbacks. See §5.
 │
 ├── main/
-│   ├── main.tscn              # root: FrameHost + PrintingOverlay layers; listens to StateMachine
-│   └── main.gd
+│   ├── main.tscn              # ⬜ not built. root: FrameHost + PrintingOverlay layers; listens to StateMachine
+│   └── main.gd                # ⬜ not built. This is where Feed's signals get forwarded into StateMachine
+│                               #   (see Implementation Status above) — nothing does that yet.
 │
 ├── feed/                      # everything that lives INSIDE the SubViewport
-│   ├── feed.tscn              # ✅ built. Feed (Control) > CardContainer (Control) + PromptFinger (last child)
-│   ├── feed.gd                # ✅ built. Recycled pool of pool_size post_cards, drag/momentum scroll,
-│   │                          #   fatigue accumulation, per-card distortion, nearest-card signal. See §1a.
-│   ├── post_card.tscn         # ✅ built. Root Control > BackgroundColor, DistortGroup (CanvasGroup) > VBoxContainer
-│   │                          #   (CaptionBox w/ Artistlabel+ArtworkLabel, separator ColorRect, ArtworkRect)
-│   ├── post_card.gd           # ✅ built. setup(artist,title,texture), set_distortion(0..1) via distort_group's material
-│   ├── dwell_tracker.gd       # ⬜ not built. Plain Node child of feed.tscn; NOT told about post changes by polling —
-│   │                          #   listen to Feed.nearest_card_changed(post_card, artwork_data) instead. On sustained
-│   │                          #   stillness past dwell_threshold, call feed.set_scroll_locked(true) and signal
-│   │                          #   whoever owns focus_frame/StateMachine to transition to FOCUSING.
-│   ├── prompt_finger.tscn     # ⬜ not built. Idle swipe animation. Feed calls prompt_finger.dismiss() on first input
-│   │                          #   and prompt_finger.reset() on Feed.reset() — implement both methods.
+│   ├── feed.tscn               # ✅ built. Feed (Control) > CardContainer (Control) + PromptFinger (last child)
+│   ├── feed.gd                 # ✅ built. Recycled pool of pool_size post_cards, drag/momentum scroll,
+│   │                           #   fatigue accumulation, per-card distortion, nearest-card signal. See §1a.
+│   ├── post_card.tscn          # ✅ built. Root Control > BackgroundColor, DistortGroup (CanvasGroup) > VBoxContainer
+│   │                           #   (CaptionBox w/ Artistlabel+ArtworkLabel, separator ColorRect, ArtworkRect)
+│   ├── post_card.gd            # ✅ built. setup(artist,title,texture), set_distortion(0..1) via distort_group's material
+│   ├── dwell_tracker.gd        # ⬜ not built. Plain Node child of feed.tscn; NOT told about post changes by polling —
+│   │                           #   listen to Feed.nearest_card_changed(post_card, artwork_data) instead. On sustained
+│   │                           #   stillness past dwell_threshold, call feed.set_scroll_locked(true) and
+│   │                           #   StateMachine.request_focus(). On cancellation, StateMachine.cancel_focus().
+│   ├── prompt_finger.tscn      # ⬜ not built. Idle swipe animation. Feed calls prompt_finger.dismiss() on first input
+│   │                           #   and prompt_finger.reset() on Feed.reset() — implement both methods.
 │   └── prompt_finger.gd
 │
 ├── framing/                   # everything that presents the SubViewport in a context
@@ -81,11 +93,14 @@ res://
 │       └── focus_frame.gd
 │
 ├── printing/
-│   ├── printing_overlay.tscn  # progress bar/animation while API + printer run (two-phase bar, see §3 FSM notes)
+│   ├── printing_overlay.tscn  # progress bar/animation while API + printer run (two-phase bar, see §3 FSM notes).
+│   │                          #   Drives StateMachine.request_printing()/request_revert() once ExternalBridge's
+│   │                          #   horoscope_ready/print_finished signals both land.
 │   ├── printing_overlay.gd
 │   ├── result_card.tscn       # optional on-screen preview of the printed text
 │   ├── result_card.gd
-│   └── horoscope_client.gd    # no scene; builds prompt from ArtworkData tags, calls external_bridge, parses JSON reply
+│   └── horoscope_client.gd    # no scene; builds the ArtworkData -> ExternalBridge.request_horoscope() call,
+│                               #   listens for horoscope_ready, stores text into SessionData.last_horoscope_text
 │
 ├── shaders/                   # shaders are shared visual assets, referenced by feed/ and framing/
 │   ├── image_distort.gdshader # ⬜ not built — REQUIRED for post_card.gd to run. Must expose a float
@@ -102,8 +117,10 @@ res://
 │       └── ...
 │
 └── external/                  # dev-time copy; shipped NEXT TO the exported executable, not inside the .pck (see §5)
-    ├── horoscope_api.py       # calls you.com API, prints JSON {"text": "..."} to stdout
-    └── print_job.py           # wraps thermal-pocket-printer repo, takes text (+ optional dithered image) via CLI args
+    ├── horoscope_api.py       # ⬜ not built. Must accept --title --artist --date --tags and print JSON
+    │                          #   {"text": "..."} to stdout — external_bridge.gd already calls it exactly this way.
+    └── print_job.py           # ⬜ not built. Must accept --text (+ optional --image <path>), exit 0 on success —
+                                #   external_bridge.gd already calls it exactly this way.
 ```
 
 ### Content manifest schema (`content/manifest.json`)
@@ -126,29 +143,33 @@ res://
 
 - `id` is the stable key used in logs and session data; never key anything off the filename or array index.
 - `file` is relative to the manifest's own folder, so the whole `content/` directory is relocatable.
-- `tags` are the horoscope seed: `horoscope_client.gd` feeds `title`, `artist`, `date`, `tags` into the prompt. Curating tags is how you tune the printout's tone per artwork — no code change needed.
+- `tags` are the horoscope seed: `horoscope_client.gd` feeds `title`, `artist`, `date`, `tags` into the prompt (and `external_bridge.gd` already joins `tags` into a single comma-separated `--tags` argument). Curating tags is how you tune the printout's tone per artwork — no code change needed.
 - `content_library.gd` validates the manifest on startup (missing files, duplicate ids, empty tags) and logs problems instead of crashing; a broken entry is skipped, the exhibit keeps running.
-- Optional fields can be added later (e.g. `credit`, `palette_hint`) without breaking older code — parse defensively, ignore unknown keys.
+- Optional fields (e.g. `credit`, `palette_hint`) pass through into `ArtworkData` untouched even though nothing consumes them yet — `content_library.gd` copies any unrecognized manifest keys forward rather than dropping them.
 
-## 1a. Autoload Contract Required by `feed.gd` (implement to match, or edit feed.gd)
+## 1a. Autoload Contract Between `feed.gd` and `content_library.gd` / `session_data.gd` (as implemented)
 
-`feed.gd` is already written and calls these directly (no null/has-method guards), so `content_library.gd` and `session_data.gd` must match this shape or the feed will error at runtime:
+`feed.gd` calls these directly (no null/has-method guards), and both autoloads now implement this shape exactly:
 
 ```gdscript
 # ContentLibrary (autoload)
 func get_artwork_count() -> int
-func get_artwork(order_index: int) -> Dictionary   # {id, title, artist, tags, ...} — NOT keyed by manifest "file"/id string,
-                                                     # Feed always passes a plain 0..count-1 index (see note below)
+func get_artwork(order_index: int) -> Dictionary   # {id, title, artist, date, tags, _resolved_path, ...}
 func load_texture(artwork_data: Dictionary) -> Texture2D
+func reshuffle_order() -> void                     # not part of feed.gd's contract, but called by state_machine.gd
+                                                     # on entering REVERTING
 ```
 ```gdscript
 # SessionData (autoload)
-var fatigue: float   # Feed writes this every frame; other systems (frame_host escalation) should read it, not recompute it
+var fatigue: float   # Feed writes this every frame; other systems (frame_host escalation, state_machine's
+                      # SCROLLING->DISTORTING check) read it, not recompute it
 ```
 
-Notes for whoever builds `content_library.gd`:
-- Feed maps its own infinite `logical_index` (can be negative, unbounded) to a manifest entry via `((logical_index % count) + count) % count`, then calls `get_artwork(order_index)`. This assumes `get_artwork` takes a **plain array-style index into your current shuffle order**, not the manifest's `id` string. If you'd rather key by `id`, either add a separate `get_shuffled_order() -> Array[int]` that Feed can consult, or change `_artwork_for_logical_index()` in `feed.gd` to go through it — flagging so the two aren't built to mismatching assumptions.
-- `reset()` on Feed rebuilds its whole pool from scratch (calls `get_artwork_count`/`get_artwork` again), so re-shuffling inside `content_library.gd` on REVERTING is enough — Feed doesn't need to be told the order changed, it'll just re-query it.
+Implementation notes:
+- `get_artwork(order_index)` indexes into `content_library.gd`'s **internal shuffled run order**, not the manifest's own array position or `id` string — Feed's `order_index` (already wrapped into `0..count-1` via `((logical_index % count) + count) % count`) is treated as an index into "whoever's currently up" for this visitor's run, not into the manifest itself.
+- `reshuffle_order()` regenerates that run order and is called once, by `state_machine.gd`, on entering `REVERTING`. Feed's `reset()` re-queries `get_artwork_count()`/`get_artwork()` from scratch afterwards, so `content_library.gd` doesn't need to push any notification — Feed just needs to be told to rebuild, which is its own `reset()` (§2a), called separately by whatever drives REVERTING's scene-side cleanup.
+- `load_texture()` caches by `id` in-memory (`Image.load()` → `ImageTexture.create_from_image()`), so repeated laps through the run order don't redecode the same file.
+- `session_data.gd` additionally tracks `current_artwork`, `dwell_elapsed`, `has_interacted`, and `last_horoscope_text` for `dwell_tracker`/`focus_frame`/`printing_overlay` to use once built — these aren't part of Feed's contract, just co-located session state per the file's original purpose ("tracks current post, scroll velocity, dwell timer, fatigue/distortion level").
 
 ## 2. Framing: container-based, not camera-based
 
@@ -206,43 +227,62 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 - **PRINTING**: focus_frame locks feed input, printing_overlay shows a two-phase progress bar. horoscope_client builds the prompt from the ArtworkData (title/artist/date/tags), external_bridge runs `horoscope_api.py`, then `print_job.py`. Bar reflects *both* steps (0–50% "waiting on words", 50–100% "printing") since API latency and print time are unrelated durations — don't fake one linear bar over an unknown-length combined process.
 - **REVERTING**: fade/reset everything — shader uniforms, timers, thread state, frame_host back to bare framing — clear SessionData, re-shuffle feed order via content_library, back to IDLE.
 
+### As implemented (`state_machine.gd`)
+
+- `state_changed(previous: int, current: int)` is the only signal; there is no per-state signal. Anything reacting to a specific state (`main.gd`, `frame_host.gd`, `printing_overlay.gd`) should switch on `current` inside a single handler rather than each listening for a different event.
+- The **only** automatic transition is `SCROLLING -> DISTORTING`, gated by `@export var distorting_fatigue_threshold` (default `0.25`) checked against `SessionData.fatigue` in `_process()`. Every other edge is one of these explicit calls, all no-ops if the state machine isn't in the expected source state (so double-calls from an eager caller are harmless):
+  - `notify_first_interaction()` — `IDLE -> SCROLLING`; also flips `SessionData.has_interacted`. **Nothing calls this yet** — it's meant to be wired to `Feed.first_interaction` from `main.gd`, since Feed itself must never depend on StateMachine (§2a).
+  - `request_focus()` — `SCROLLING/DISTORTING -> FOCUSING`, for `dwell_tracker.gd`.
+  - `cancel_focus()` — `FOCUSING -> DISTORTING`, for `dwell_tracker.gd`/`focus_frame.gd` if the visitor scrolls away mid-tween.
+  - `request_printing()` — `FOCUSING -> PRINTING`, for `focus_frame.gd` once its scale-up tween completes.
+  - `request_revert()` — `PRINTING -> REVERTING`, for `printing_overlay.gd` once both `ExternalBridge` signals (`horoscope_ready`, `print_finished`) have landed (success or fallback — printing must never dead-end).
+  - `request_idle()` — `REVERTING -> IDLE`, for `main.gd` once revert visuals finish.
+- On entering `REVERTING`, `state_machine.gd` itself calls `SessionData.reset()` and `ContentLibrary.reshuffle_order()`. It does **not** call `Feed.reset()`, reset shader uniforms, or touch frame_host — those remain the responsibility of whatever scene node owns REVERTING's visual cleanup (per the original design's "fade/reset everything" — the FSM only owns session/content state, not scene state).
+
 ## 4. Content Loading
 
-- On startup `content_library.gd` looks for a `content/` folder **next to the executable** (`OS.get_executable_path().get_base_dir()`); if absent (i.e. running from the editor) it falls back to `res://content/`.
-- External images load at runtime via `Image.load_from_file()` → `ImageTexture` (the res:// import pipeline doesn't apply to executable-adjacent files, and that's fine — decode once at startup or lazily with a small cache).
+- On startup `content_library.gd` looks for a `content/` folder **next to the executable** (`OS.get_executable_path().get_base_dir()`, checked via `DirAccess.dir_exists_absolute`); if absent (i.e. running from the editor) it falls back to `res://content/`.
+- External images load at runtime via `Image.load()` (which handles both absolute filesystem paths and `res://`) → `ImageTexture.create_from_image()`, cached in-memory by artwork `id` so repeated laps through the shuffled order don't redecode the same file.
 - Consequence for the exhibit: curators can swap artworks or edit horoscope tags by editing a folder and a JSON file, **no re-export of the Godot project needed**.
-- Feed order is a shuffled index list over `content_library`'s artworks, re-shuffled every REVERTING; the feed recycles a small pool of post_card instances rather than instancing one per artwork.
+- Feed order is a shuffled index list (`content_library.gd`'s `_shuffle_order`) over the validated artwork array, regenerated by `reshuffle_order()` on every REVERTING (called from `state_machine.gd`); the feed recycles a small pool of post_card instances rather than instancing one per artwork.
 
 ## 5. External Script Integration
 
-Godot itself should never block on network/serial I/O. `external_bridge.gd` is the only place that spawns processes; it uses `OS.execute()` in blocking mode from a background `Thread` (or `OS.create_process()` + polling), communicating via stdout/JSON or temp files:
+Godot itself should never block on network/serial I/O. `external_bridge.gd` is the only place that spawns processes.
 
-- `horoscope_api.py`: takes `--title`, `--artist`, `--date`, `--tags` as args (straight out of the manifest entry), calls you.com's API, prints JSON `{ "text": "..." }` to stdout.
-- `print_job.py`: wraps the thermal-pocket-printer repo's own CLI/library calls, takes the horoscope text + maybe a cropped/dithered version of the artwork, sends to the printer over serial/Bluetooth.
+- `horoscope_api.py`: takes `--title`, `--artist`, `--date`, `--tags` (tags pre-joined into one comma-separated string) as args, calls you.com's API, prints JSON `{ "text": "..." }` to stdout.
+- `print_job.py`: takes `--text` (+ optional `--image <path>`), wraps the thermal-pocket-printer repo's own CLI/library calls, sends to the printer over serial/Bluetooth, exits `0` on success.
 
-**Key implementation details**:
-- Run both in a Godot `Thread` (or `WorkerThreadPool` task), never on the main thread — a stalled API call or serial handshake would otherwise freeze the whole exhibit. Emit completion back to the main thread via `call_deferred`.
-- Every external call gets a timeout and a fallback: pre-written generic horoscope lines if the API fails, a graceful "the printer is dreaming, ask staff" state if printing fails. PRINTING must never dead-end.
-- For export: bundle the Python scripts (ideally compiled to standalone executables via PyInstaller so no interpreter is required on the kiosk) in an `external/` folder **next to the exported executable**, resolved relative to `OS.get_executable_path()` — never hardcoded dev paths, never inside the .pck.
+### As implemented (`external_bridge.gd`)
+
+- Each request (`request_horoscope(artwork_data)`, `request_print(text, image_path="")`) starts a dedicated `Thread` running `OS.execute()` in blocking mode (which captures stdout into an `output` array) — the blocking call happens off the main thread, so a stalled API call or serial handshake never freezes the exhibit.
+- Completion is detected by **polling a shared, mutex-guarded result dictionary** on a `get_tree().create_timer()` loop every 0.05s, rather than `call_deferred` push-notification — simpler to reason about alongside a timeout, at the cost of a small poll granularity.
+- **Timeouts**: `HOROSCOPE_TIMEOUT_SEC = 12.0`, `PRINT_TIMEOUT_SEC = 20.0`. If the timeout elapses before the thread reports `done`, the bridge stops waiting and reports a fallback immediately — the underlying script keeps running in its thread/process in the background and is joined lazily (`wait_to_finish()`) the next time a request of the same kind starts, not right away.
+- **Fallbacks**: on horoscope timeout/failure, `horoscope_ready(text, was_fallback: true)` fires with a line picked from a small hardcoded `FALLBACK_HOROSCOPES` array (4 generic lines) instead of dead-ending PRINTING. On print timeout/failure, `print_finished(success: false)` fires so `printing_overlay.gd` can show a "the printer is dreaming, ask staff" state — no fallback text needed there, just a clear failure signal.
+- **Interpreter resolution**: if the resolved script path ends in `.py`, it's invoked as `python3 <script> <args>` (dev/editor convenience — never assume a `python3` install on the kiosk); any other extension (i.e. a PyInstaller-built standalone executable, the intended export target) is invoked directly. This is decided per-call from the file extension, not a global flag.
+- **Path resolution** mirrors `content_library.gd`: `OS.get_executable_path().get_base_dir() + "/external"` if that directory exists, else `ProjectSettings.globalize_path("res://external")` for editor runs. Never inside the `.pck`.
+- Only one horoscope request and one print request can be in flight at a time — a second call while one is still `is_alive()` is ignored with a warning rather than queued.
+
+**Still open**: `horoscope_api.py` and `print_job.py` themselves don't exist yet. `external_bridge.gd` already calls them with the exact argument shapes above, so writing them is now purely a matter of matching that CLI contract — no Godot-side changes should be needed.
 
 ## 6. Key Technical Challenges
 
-- **Distortion that reads as "fatigue" not "glitch"**: subtle shader work (slight chromatic aberration, softening, gentle wave warp) that intensifies smoothly rather than an obvious glitch-art effect. Fine-tune curve shape (ease-in, not linear) so early scrolling feels normal.
-- **Text distortion**: Godot's Label/RichTextLabel don't warp easily. Options: render text to a Viewport texture and apply the same shader as images, or use per-character transforms via `RichTextEffect`.
-- **Input forwarding through a scaled SubViewportContainer**: the one real risk of the container approach; spike it early (build order step 4) and quarantine any workaround inside `frame_host.gd`.
-- **Decoupling scroll speed from fatigue**: fast flicking should build fatigue faster than slow deliberate scrolling — track velocity, not just item count, so the piece rewards/punishes behavior meaningfully.
-- **Dwell detection UX**: needs a "forgiveness window" — brief pauses (checking a caption) shouldn't fully trigger focus mode; only sustained stillness should.
-- **API latency variance**: you.com response time isn't guaranteed — timeout + fallback horoscope text (pre-written generic lines) if the call takes too long or fails, so the installation never dead-ends for a gallery visitor.
-- **Exported build + external assets**: both `external/` (scripts) and `content/` (artwork + manifest) live beside the exported executable; verify path resolution on the target machine, not just in the editor.
-- **Session reset integrity**: make sure REVERTING fully clears shader uniforms, timers, and thread state — leftover state from one visitor bleeding into the next is an easy bug in exhibit-style software that runs for days unattended.
+- **Distortion that reads as "fatigue" not "glitch"**: subtle shader work (slight chromatic aberration, softening, gentle wave warp) that intensifies smoothly rather than an obvious glitch-art effect. Fine-tune curve shape (ease-in, not linear) so early scrolling feels normal. *(Still open — shaders not built.)*
+- **Text distortion**: Godot's Label/RichTextLabel don't warp easily. Options: render text to a Viewport texture and apply the same shader as images, or use per-character transforms via `RichTextEffect`. *(Partially addressed structurally — `post_card.tscn`'s `DistortGroup` CanvasGroup flattens image+text into one texture before the shader runs, so text distorts "for free" once `image_distort.gdshader` exists; still open.)*
+- **Input forwarding through a scaled SubViewportContainer**: the one real risk of the container approach; spike it early (build order step 4) and quarantine any workaround inside `frame_host.gd`. *(Still open — framing/ not built.)*
+- **Decoupling scroll speed from fatigue**: fast flicking should build fatigue faster than slow deliberate scrolling — track velocity, not just item count, so the piece rewards/punishes behavior meaningfully. *(Done — lives in `feed.gd`'s `_update_fatigue`.)*
+- **Dwell detection UX**: needs a "forgiveness window" — brief pauses (checking a caption) shouldn't fully trigger focus mode; only sustained stillness should. *(Still open — `dwell_tracker.gd` not built.)*
+- **API latency variance**: you.com response time isn't guaranteed. *(Done — `external_bridge.gd` enforces a 12s horoscope timeout / 20s print timeout with hardcoded fallback text, so the installation never dead-ends for a gallery visitor.)*
+- **Exported build + external assets**: both `external/` (scripts) and `content/` (artwork + manifest) live beside the exported executable; verify path resolution on the target machine, not just in the editor. *(Resolution logic done in both `content_library.gd` and `external_bridge.gd`; still needs verification on real kiosk hardware.)*
+- **Session reset integrity**: REVERTING must fully clear shader uniforms, timers, and thread state — leftover state from one visitor bleeding into the next is an easy bug in exhibit-style software that runs for days unattended. *(Partially done — `state_machine.gd` clears `SessionData` and reshuffles `ContentLibrary` on entering REVERTING; `external_bridge.gd`'s in-flight thread guard prevents overlapping requests. Scene-level cleanup — shader uniforms, tweens, `Feed.reset()` — is still unowned since `main.gd`/`framing/` don't exist yet.)*
 
 ## 7. Suggested Build Order
 
-1. ~~`content_library` + manifest loading (with executable-adjacent override) + feed showing real artworks, scroll input, prompt finger — no distortion yet.~~ **Partially done**: `feed.gd`/`post_card.tscn` are built and expect the §1a contract, but `content_library.gd` and `prompt_finger.tscn/.gd` themselves still need to be written to match. Do these next — feed.tscn can't run at all without them.
+1. `content_library` + manifest loading (with executable-adjacent override) + feed showing real artworks, scroll input, prompt finger — no distortion yet. **`content_library.gd` is done.** Still blocked on `prompt_finger.tscn/.gd` — `feed.tscn` references it but it doesn't exist yet.
 2. Image/text distortion shaders wired to a manually-tweaked debug slider. **Blocked on `shaders/image_distort.gdshader`** — `post_card.gd`'s `_ready()` already calls `load()` on it, so write the shader before testing the card scene at all. The "debug slider" can just be a Range node calling `post_card.set_distortion()` directly for isolated testing, separate from Feed's automatic fatigue-driven mapping.
-3. ~~Fatigue accumulation from real scroll input, replacing the debug slider.~~ **Done** — lives inside `feed.gd` (`_update_fatigue`), written directly against real drag/momentum input, not a debug slider. Writes to `SessionData.fatigue` (§1a) — build `session_data.gd` next so this has somewhere to land.
+3. Fatigue accumulation from real scroll input, replacing the debug slider. **Done** — lives inside `feed.gd` (`_update_fatigue`), writing to `SessionData.fatigue`, which **is now built** and ready to receive it.
 4. **Framing spike**: SubViewport + SubViewportContainer, verify swipe input while scaled/offset, then build frame_host with phone_frame as the first decoration. Feed already exposes `set_scroll_locked()` for this to call during transitions (§2a) — frame_host doesn't need to reach into Feed's internals.
-5. Dwell detection + focus_frame transition (container scale-up onto the dwelled post). Build `dwell_tracker.gd` against `Feed.nearest_card_changed` (§2a) rather than polling card positions.
-6. External script plumbing via external_bridge (start with a mocked/local fake API and a print-to-log stub instead of the real printer) to validate the async threading model and the two-phase progress bar.
+5. Dwell detection + focus_frame transition (container scale-up onto the dwelled post). Build `dwell_tracker.gd` against `Feed.nearest_card_changed` (§2a), calling `StateMachine.request_focus()`/`cancel_focus()` (§3) rather than polling card positions or reimplementing FSM logic.
+6. External script plumbing via external_bridge. **`external_bridge.gd` itself is done** (threading, timeouts, fallbacks, path resolution) — what's left is writing `horoscope_api.py`/`print_job.py` to match the CLI contract in §5, and building `horoscope_client.gd`/`printing_overlay.gd` to call `request_horoscope()`/`request_print()` and drive `StateMachine.request_printing()`/`request_revert()` off the resulting signals. Start with mocked scripts (echo a canned JSON string / exit 0) to validate that wiring before touching the real API or printer hardware.
 7. Swap in real you.com API and real printer hardware.
-8. Reset/revert flow + exhibit hardening (crash recovery, timeouts, logging, path checks on the kiosk machine). Note `Feed.reset()` already exists and does its part (§2a) — this step is about wiring it into `state_machine.gd`'s REVERTING handler alongside the rest.
+8. Reset/revert flow + exhibit hardening (crash recovery, timeouts, logging, path checks on the kiosk machine). `state_machine.gd`'s REVERTING handling and `Feed.reset()` both already exist (§3, §2a) — this step is about wiring `main.gd` so `Feed.reset()` and any scene-level shader/tween cleanup actually run alongside `StateMachine`'s session-data reset, plus `main.gd` calling `StateMachine.request_idle()` once that cleanup finishes.

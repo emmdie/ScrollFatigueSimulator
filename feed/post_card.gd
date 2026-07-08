@@ -3,16 +3,15 @@ extends Control
 @export var artist_label: Label
 @export var artwork_label: Label
 @export var artwork: TextureRect
-@export var distort_group: CanvasGroup
 
 var _distort_material: ShaderMaterial
 
 
 func _ready() -> void:
-	if distort_group:
-		_distort_material = ShaderMaterial.new()
-		_distort_material.shader = load("res://shaders/image_distort.gdshader")
-		distort_group.material = _distort_material
+	if artwork and artwork.material is ShaderMaterial:
+		_distort_material = artwork.material
+	else:
+		push_error("post_card.gd: ArtworkRect has no ShaderMaterial assigned in the editor")
 
 
 func setup(artist: String, title: String, art: Texture2D) -> void:
