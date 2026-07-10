@@ -1,0 +1,54 @@
+[gd_scene format=3 uid="uid://cgodaqmtspga1"]
+
+[ext_resource type="Script" uid="uid://cg60m2ropj1mb" path="res://framing/frame_host.gd" id="1_twvpn"]
+[ext_resource type="PackedScene" uid="uid://budcv581qpjra" path="res://feed/feed.tscn" id="2_t1c1x"]
+[ext_resource type="PackedScene" uid="uid://8taix7wbgvqu" path="res://framing/frames/phone_frame.tscn" id="2_xdl3u"]
+[ext_resource type="Script" uid="uid://dxf2jwqvf21co" path="res://feed/dwell_tracker.gd" id="5_2ywpr"]
+[ext_resource type="Script" uid="uid://bnhh7op0vw6sh" path="res://framing/debug_state_router.gd" id="5_t6pix"]
+[ext_resource type="PackedScene" uid="uid://dppb78mxag6ql" path="res://framing/frames/focus_frame.tscn" id="6_t6pix"]
+
+[node name="FrameHost" type="Control" unique_id=135994993 node_paths=PackedStringArray("feed_container", "sub_viewport", "feed", "decoration_layer")]
+custom_minimum_size = Vector2(607.5, 1080)
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_twvpn")
+phone_frame_scene = ExtResource("2_xdl3u")
+feed_container = NodePath("FeedContainer")
+sub_viewport = NodePath("FeedContainer/SubViewport")
+feed = NodePath("FeedContainer/SubViewport/Feed")
+decoration_layer = NodePath("DecorationLayer")
+
+[node name="FeedContainer" type="SubViewportContainer" parent="." unique_id=1594029625]
+layout_mode = 1
+offset_right = 40.0
+offset_bottom = 40.0
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="FeedContainer" unique_id=1501037754]
+handle_input_locally = false
+size = Vector2i(40, 40)
+size_2d_override = Vector2i(1080, 1920)
+size_2d_override_stretch = true
+render_target_update_mode = 4
+
+[node name="Feed" parent="FeedContainer/SubViewport" unique_id=215067885 instance=ExtResource("2_t1c1x")]
+
+[node name="DecorationLayer" type="Control" parent="." unique_id=1921307563]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="DwellTracker" type="Node" parent="." unique_id=2083194794 node_paths=PackedStringArray("feed")]
+script = ExtResource("5_2ywpr")
+feed = NodePath("../FeedContainer/SubViewport/Feed")
+dwell_threshold = 15.0
+
+[node name="DebugStateRouter" type="Node" parent="." unique_id=1389251200 node_paths=PackedStringArray("frame_host")]
+script = ExtResource("5_t6pix")
+frame_host = NodePath("..")
+phone_frame_scene = ExtResource("2_xdl3u")
+focus_frame_scene = ExtResource("6_t6pix")

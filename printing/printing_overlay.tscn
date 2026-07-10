@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cg2wpdxj1isew"]
+
+[ext_resource type="Script" uid="uid://eifmv7tu8i7u" path="res://printing/printing_overlay.gd" id="1_vu1oy"]
+
+[node name="PrintingOverlay" type="Node" unique_id=1340568883]
+script = ExtResource("1_vu1oy")

@@ -1,0 +1,31 @@
+[gd_scene format=3 uid="uid://8taix7wbgvqu"]
+
+[ext_resource type="Script" uid="uid://4uw7jxmmm1ik" path="res://framing/frames/phone_frame.gd" id="1_nfjil"]
+[ext_resource type="Texture2D" uid="uid://lp3oxlm1qxe" path="res://content/Frames/Phone.png" id="2_k0yeh"]
+
+[node name="PhoneFrame" type="Control" unique_id=1000930764]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_nfjil")
+
+[node name="PhoneDecoration" type="TextureRect" parent="." unique_id=1919428116]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+mouse_filter = 2
+texture = ExtResource("2_k0yeh")
+
+[node name="FeedSlot" type="Control" parent="." unique_id=1272187085]
+custom_minimum_size = Vector2(1080, 1920)
+anchors_preset = 0
+offset_left = 165.0
+offset_top = 168.0
+offset_right = 1245.0
+offset_bottom = 2088.0
+scale = Vector2(0.38, 0.38)
+mouse_filter = 2
