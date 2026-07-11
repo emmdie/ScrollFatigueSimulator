@@ -1,0 +1,28 @@
+[gd_scene format=3 uid="uid://x56l1plwge1b"]
+
+[ext_resource type="Script" uid="uid://c8vx7aatis16k" path="res://main.gd" id="1_0xm2m"]
+[ext_resource type="PackedScene" uid="uid://cgodaqmtspga1" path="res://framing/frame_host.tscn" id="2_h2yge"]
+[ext_resource type="PackedScene" uid="uid://8taix7wbgvqu" path="res://framing/frames/phone_frame.tscn" id="2_lquwl"]
+[ext_resource type="PackedScene" uid="uid://dppb78mxag6ql" path="res://framing/frames/focus_frame.tscn" id="3_7mycd"]
+[ext_resource type="PackedScene" uid="uid://cvk44sgdirro7" path="res://framing/frames/picture_frame.tscn" id="3_272bh"]
+[ext_resource type="PackedScene" uid="uid://cg2wpdxj1isew" path="res://printing/printing_overlay.tscn" id="3_h2yge"]
+
+[node name="Main" type="Control" unique_id=1591667798 node_paths=PackedStringArray("frame_host")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_0xm2m")
+frame_host = NodePath("FrameHost")
+phone_frame_scene = ExtResource("2_lquwl")
+picture_frame_scene = ExtResource("3_272bh")
+focus_frame_scene = ExtResource("3_7mycd")
+
+[node name="FrameHost" parent="." unique_id=135994993 instance=ExtResource("2_h2yge")]
+layout_mode = 0
+offset_right = 607.5
+offset_bottom = 1080.0
+
+[node name="PrintingOverlay" parent="." unique_id=1340568883 instance=ExtResource("3_h2yge")]

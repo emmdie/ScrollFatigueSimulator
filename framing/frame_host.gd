@@ -1,3 +1,4 @@
+class_name FrameHost
 extends Control
 ## Owns the feed SubViewport + the SubViewportContainer that displays it, and
 ## swaps FrameBase decoration scenes (phone_frame, picture_frame, focus_frame)

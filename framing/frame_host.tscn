@@ -4,8 +4,6 @@
 [ext_resource type="PackedScene" uid="uid://budcv581qpjra" path="res://feed/feed.tscn" id="2_t1c1x"]
 [ext_resource type="PackedScene" uid="uid://8taix7wbgvqu" path="res://framing/frames/phone_frame.tscn" id="2_xdl3u"]
 [ext_resource type="Script" uid="uid://dxf2jwqvf21co" path="res://feed/dwell_tracker.gd" id="5_2ywpr"]
-[ext_resource type="Script" uid="uid://bnhh7op0vw6sh" path="res://framing/debug_state_router.gd" id="5_t6pix"]
-[ext_resource type="PackedScene" uid="uid://dppb78mxag6ql" path="res://framing/frames/focus_frame.tscn" id="6_t6pix"]
 
 [node name="FrameHost" type="Control" unique_id=135994993 node_paths=PackedStringArray("feed_container", "sub_viewport", "feed", "decoration_layer")]
 custom_minimum_size = Vector2(607.5, 1080)
@@ -46,9 +44,3 @@ mouse_filter = 2
 script = ExtResource("5_2ywpr")
 feed = NodePath("../FeedContainer/SubViewport/Feed")
 dwell_threshold = 15.0
-
-[node name="DebugStateRouter" type="Node" parent="." unique_id=1389251200 node_paths=PackedStringArray("frame_host")]
-script = ExtResource("5_t6pix")
-frame_host = NodePath("..")
-phone_frame_scene = ExtResource("2_xdl3u")
-focus_frame_scene = ExtResource("6_t6pix")

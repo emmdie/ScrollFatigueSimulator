@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="ScrollFatigue"
+run/main_scene="uid://x56l1plwge1b"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.3372549, 0.3529412, 0.45882353, 1)
 config/icon="res://icon.svg"
