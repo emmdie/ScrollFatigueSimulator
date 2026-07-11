@@ -9,12 +9,13 @@ Godot software for an artistic vision of "scroll fatigue" — engagement with ea
 
 ## Implementation Status (read second, right after §0)
 
-- **Built:** `feed/` (post_card, feed, prompt_finger, dwell_tracker), all four `autoload/` singletons (`content_library`, `session_data`, `state_machine`, `external_bridge`), `shaders/image_distort.gdshader`, `framing/` (`frame_base`, `frame_host`, `phone_frame`), and `printing/printing_overlay`, `printing/horoscope_client` — see §1 tree for what each does.
+- **Built:** `feed/` (post_card, feed, prompt_finger, dwell_tracker), all four `autoload/` singletons (`content_library`, `session_data`, `state_machine`, `external_bridge`), `shaders/image_distort.gdshader`, `framing/` (`frame_base`, `frame_host`, `phone_frame`, `focus_frame`), `printing/printing_overlay`, `printing/horoscope_client`, and `main/` (`main.tscn`, `main.gd`) — see §1 tree for what each does.
 - **Mocked:** `external/horoscope_api.py`, `external/print_job.py` — match the §5 CLI contract but return canned/templated results; swap for the real you.com API and printer hardware later (§7 step 7).
-- **Not built:** `picture_frame`, `printing/result_card`, `text_distort`/`feed_distort` shaders, `main.tscn`/`main.gd`.
-- **Nothing wires the built pieces together yet** except PRINTING → REVERTING. `StateMachine`'s `request_*`/`notify_*` methods and `ExternalBridge`'s `request_horoscope()`/`request_print()` all exist and work standalone, but no scene calls into them — that's `main.gd`'s job (§3, §5, §7). `dwell_tracker.gd` is wired to `Feed`/`StateMachine` directly since it owns that edge; `printing_overlay.gd` is likewise wired directly to `StateMachine`/`ExternalBridge` since it owns the PRINTING edge.
+- **Not built:** `picture_frame`, `printing/result_card`, `text_distort`/`feed_distort` shaders.
+- **`main.gd` is the conductor** (§3a): forwards `Feed.first_interaction` → `StateMachine.notify_first_interaction()`, maps `StateMachine.state_changed` onto `frame_host` framing (incl. fatigue-driven DISTORTING escalation), and owns REVERTING cleanup (`Feed.reset()` + bare framing → `request_idle()`). `dwell_tracker.gd` (FOCUSING edge) and `printing_overlay.gd` (PRINTING edge) stay wired to `StateMachine`/`ExternalBridge` directly; `main.gd` does not duplicate them.
 - `feed.gd` never reads or drives `StateMachine` — it only exposes `set_scroll_locked()`, `reset()`, and `nearest_card_changed`/`first_interaction` signals (§2a). Whoever owns dwell/framing/FSM calls into Feed, never the reverse.
 - `post_card.tscn`'s `ArtworkRect` carries the distortion `ShaderMaterial` directly (no `CanvasGroup`); captions are unaffected.
+- `frame_host.gd` exposes `@export var feed` (the inner SubViewport Feed); `main.gd` reads it as `frame_host.feed`. `DwellTracker` lives inside `frame_host.tscn` beside the Feed so its own `@export feed` resolves without editable children.
 
 ## 0. Structural Conventions
 
@@ -40,8 +41,8 @@ res://
 │                              #   + fallbacks. See §5.
 │
 ├── main/
-│   ├── main.tscn              # ⬜ root: FrameHost + PrintingOverlay layers; listens to StateMachine
-│   └── main.gd                # ⬜ forwards Feed's signals into StateMachine — nothing does this yet
+│   ├── main.tscn              # ✅ root Control: FrameHost + PrintingOverlay instances. Project main scene.
+│   └── main.gd                # ✅ conductor: first_interaction->FSM, state_changed->framing, REVERTING cleanup. §3a.
 │
 ├── feed/                      # everything that lives INSIDE the SubViewport
 │   ├── feed.tscn / feed.gd    # ✅ recycled post_card pool, drag/momentum scroll, fatigue accumulation,
@@ -50,20 +51,17 @@ res://
 │   │                          #   pre-assigned ShaderMaterial.
 │   ├── dwell_tracker.gd       # ✅ @export var feed; polls SessionData.scroll_velocity against
 │   │                          #   dwell_threshold with a forgiveness_window, then feed.set_scroll_locked(true)
-│   │                          #   + StateMachine.request_focus()/cancel_focus(). See §3a.
+│   │                          #   + StateMachine.request_focus()/cancel_focus(). Node in frame_host.tscn. See §3a.
 │   └── prompt_finger.tscn/.gd # ✅ looping swipe tween; dismiss()/reset() fade out/in. Wired into feed.gd.
 │
 ├── framing/                   # presents the SubViewport in a context
 │   ├── frame_host.tscn        # ✅ FrameHost (Control) > FeedContainer (SubViewportContainer > SubViewport >
-│   │                          #   Feed instance) + DecorationLayer (Control, mouse_filter=Ignore).
+│   │                          #   Feed instance) + DecorationLayer (Ignore) + DwellTracker. Exposes @export feed.
 │   ├── frame_host.gd          # ✅ to_bare_fullscreen()/show_frame(PackedScene) tween FeedContainer to the
 │   │                          #   active frame's FeedSlot rect, aspect-fit clamped (see §2), crossfade
 │   │                          #   decoration via FrameBase.enter/exit. Manual push_input() fallback wired,
 │   │                          #   off by default.
 │   ├── frame_base.gd          # ✅ abstract: feed_slot_path, get_feed_global_rect(), enter()/exit().
-│   ├── debug_state_router.gd  # ✅ STOPGAP: forwards Feed.first_interaction -> StateMachine.notify_first_interaction(),
-│   │                          #   and StateMachine.state_changed -> frame_host.show_frame()/
-│   │                          #   to_bare_fullscreen(). Delete once main.gd exists (§3a).
 │   └── frames/
 │       ├── phone_frame.tscn/.gd  # ✅ placeholder hand+phone decoration + FeedSlot.
 │       ├── picture_frame.tscn/.gd # ⬜ same pattern as phone_frame.
@@ -178,14 +176,14 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 
 ### As implemented (`state_machine.gd`)
 
-- Single `state_changed(previous, current)` signal — no per-state signals.
+- Single `state_changed(previous: int, current: int)` signal — no per-state signals. States are `enum STATE { IDLE, SCROLLING, DISTORTING, FOCUSING, PRINTING, REVERTING }` (callers use `StateMachine.STATE.X`); current state is `var state: int`. `_on_enter()` runs **before** `state_changed` is emitted, so REVERTING's `SessionData.reset()`/`reshuffle_order()` are already applied by the time listeners react.
 - Only automatic transition: `SCROLLING -> DISTORTING`, gated by `@export var distorting_fatigue_threshold` (default `0.25`) against `SessionData.fatigue`. Every other edge is an explicit no-op-if-wrong-state call:
-  - `notify_first_interaction()` — `IDLE -> SCROLLING` + flips `has_interacted`. **Unwired** (meant for `main.gd` off `Feed.first_interaction`).
+  - `notify_first_interaction()` — `IDLE -> SCROLLING` + flips `has_interacted`. Wired by `main.gd` off `Feed.first_interaction`.
   - `request_focus()` / `cancel_focus()` — `dwell_tracker.gd`.
   - `request_printing()` — `focus_frame.gd`, once its scale-up tween completes.
   - `request_revert()` — `printing_overlay.gd`, once both `ExternalBridge` signals land.
   - `request_idle()` — `main.gd`, once revert visuals finish.
-- On entering `REVERTING`, the FSM itself calls `SessionData.reset()` + `ContentLibrary.reshuffle_order()` — it does **not** touch `Feed` or `frame_host`; that scene-level cleanup is unowned until `main.gd` exists.
+- On entering `REVERTING`, the FSM calls `SessionData.reset()` + `ContentLibrary.reshuffle_order()` **before** emitting `state_changed`, so the reshuffle is live when `main.gd` rebuilds. Scene-level cleanup (`Feed.reset()`, bare framing) is owned by `main.gd`, which then calls `request_idle()`.
 
 ## 3a. Dwell Detection (`dwell_tracker.gd`, as implemented)
 
@@ -195,8 +193,8 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 - A new `nearest_card_changed` while focused calls `StateMachine.cancel_focus()` + unlocks the feed before tracking the new card — covers the "scrolled away mid-tween" cancel path.
 - Exported knobs: `dwell_threshold` (1.2s default), `forgiveness_window` (0.3s), `velocity_still_threshold` (40 px/s).
 - `focus_frame.gd` (extends `FrameBase`, same pattern as `phone_frame`) owns the FOCUSING → PRINTING edge: `enter(duration: float) -> void` (signature from `FrameBase`, driven by `frame_host`'s crossfade timing) fades the frame in, then calls `StateMachine.request_printing()` once the fade completes. `exit(duration: float) -> Tween` returns its tween so `frame_host` can await it before swapping frames. Its `progress_bar` export is chrome only — `printing_overlay.gd` (unbuilt) will drive its value later.
-- `debug_state_router.gd` is a temporary stand-in for `main.gd`: forwards `Feed.first_interaction` into `StateMachine.notify_first_interaction()` (without this, IDLE never advances — nothing else calls it) and listens to `StateMachine.state_changed` to call `frame_host.to_bare_fullscreen()`/`show_frame()` accordingly. **Delete it once `main.gd` exists** — don't merge its logic in, `main.gd` also needs to forward `Feed`'s signals the other direction.
-- PRINTING now resolves on its own: `printing_overlay.gd` drives `focus_frame`'s progress bar and calls `StateMachine.request_revert()` once the (mocked) horoscope + print calls both land. Still stuck without `main.gd`/`debug_state_router.gd` wiring `Feed`/`frame_host` into `StateMachine`'s other transitions.
+- `main.gd` (`main/`, extends `Control`) owns framing orchestration and the IDLE/REVERTING bookends. In `_ready()` it connects `Feed.first_interaction -> StateMachine.notify_first_interaction` and `StateMachine.state_changed -> _on_state_changed`, then sets bare framing. Per state: IDLE → `to_bare_fullscreen()`; DISTORTING → polls `SessionData.fatigue` in `_process` and escalates bare → `phone_frame` → `picture_frame` at `@export` thresholds (`picture_frame_scene` optional — caps at phone until built); FOCUSING → `show_frame(focus_frame_scene)`; PRINTING → no-op (owned by focus_frame + printing_overlay); REVERTING → `Feed.reset()` + `to_bare_fullscreen()`, then `request_idle()` after `revert_settle_time`. Reads the Feed via `frame_host.feed`. `debug_state_router.gd` is deleted.
+- PRINTING resolves on its own: `printing_overlay.gd` drives `focus_frame`'s progress bar and calls `StateMachine.request_revert()` once the (mocked) horoscope + print calls both land.
 
 ## 4. Content Loading
 
@@ -220,6 +218,7 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 - `.py` scripts run via `python3` (dev convenience); anything else (a PyInstaller build, the intended export target) runs directly — decided per-call from the extension.
 - Path resolution mirrors `content_library.gd` (executable-adjacent `external/`, else `res://external`).
 - Only one horoscope request and one print request in flight at a time; a second call while one is alive is ignored with a warning.
+- `request_horoscope(artwork_data: Dictionary)` takes the whole ArtworkData dict and builds the CLI flags itself — callers pass the dict through untouched (it also carries `_resolved_path` for `print_job.py`'s `--image`). `horoscope_client.gd` only validates it.
 
 **Still open**: `horoscope_api.py`/`print_job.py` are mocked (templated text, no real network/serial I/O) — swap for the real you.com API and thermal-pocket-printer calls with no Godot-side changes needed, since `external_bridge.gd` already calls them by the CLI contract above.
 
@@ -232,7 +231,7 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 - **Dwell detection forgiveness window**: brief pauses shouldn't trigger focus, only sustained stillness. *(Done — §3a.)*
 - **API latency variance**: *(Done — 12s/20s timeouts + fallback text, §5.)*
 - **Exported build + external assets**: path resolution logic done in `content_library.gd`/`external_bridge.gd`; still needs verification on real kiosk hardware.
-- **Session reset integrity**: `state_machine.gd` clears `SessionData`/reshuffles on REVERTING; scene-level cleanup (shader uniforms, tweens, `Feed.reset()`) is unowned until `main.gd` exists.
+- **Session reset integrity**: `state_machine.gd` clears `SessionData`/reshuffles on REVERTING; scene-level cleanup (`Feed.reset()`, bare framing) owned by `main.gd`. *(Done.)*
 
 ## 7. Suggested Build Order
 
@@ -240,7 +239,7 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 2. Image distortion shader + debug slider. **Done.**
 3. Fatigue accumulation from real scroll input. **Done** — `feed.gd`'s `_update_fatigue` → `SessionData.fatigue`.
 4. **Framing spike**: **Done.** `frame_host`/`frame_base`/`phone_frame`/`focus_frame` built (`picture_frame` remains, same pattern); SubViewport sizing and aspect-ratio distortion bugs resolved (§2).
-5. Dwell detection + FOCUSING transition: **Done** (§3a) via `dwell_tracker.gd` + `focus_frame.gd`, wired through the temporary `debug_state_router.gd` until `main.gd` exists. PRINTING still dead-ends (see §3a known-issue note).
+5. Dwell detection + FOCUSING transition: **Done** (§3a) via `dwell_tracker.gd` + `focus_frame.gd`, now driven through `main.gd`.
 6. External script plumbing. **Done with mocks** — `external_bridge.gd`, `horoscope_client.gd`, `printing_overlay.gd` all built; `horoscope_api.py`/`print_job.py` mocked per §5 CLI contract.
 7. Swap in real you.com API and printer hardware.
-8. Reset/revert flow + exhibit hardening. `state_machine.gd` and `Feed.reset()` exist; remaining work is `main.gd` wiring `Feed.reset()` + scene-level cleanup alongside `StateMachine`'s reset, then calling `request_idle()`.
+8. Reset/revert flow + exhibit hardening. **Full loop wired** via `main.gd` (`Feed.reset()` + bare framing → `request_idle()`). Remaining: exhibit hardening + kiosk-hardware verification (§6).

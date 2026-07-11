@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://cvk44sgdirro7"]
 
 [ext_resource type="Script" uid="uid://cfxsl655bytn7" path="res://framing/frames/picture_frame.gd" id="1_0cxo7"]
+[ext_resource type="Texture2D" uid="uid://dg53kogotblr4" path="res://content/Frames/Painting.png" id="2_tbwkl"]
 
 [node name="PictureFrame" type="Control" unique_id=1491920309]
 layout_mode = 3
@@ -9,4 +10,27 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 script = ExtResource("1_0cxo7")
+feed_slot_path = NodePath("PictureFrame/FeedSlot")
+
+[node name="PictureFrame" type="TextureRect" parent="." unique_id=2006203135]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_tbwkl")
+expand_mode = 3
+stretch_mode = 4
+
+[node name="FeedSlot" type="Control" parent="PictureFrame" unique_id=1223710787]
+custom_minimum_size = Vector2(1080, 1920)
+anchors_preset = 0
+offset_left = 55.0
+offset_top = 39.0
+offset_right = 1135.0
+offset_bottom = 1959.0
+mouse_filter = 2

@@ -11,7 +11,6 @@ extends Control
 ## this on only if manual testing (see class comment below) shows drag/touch
 ## events failing to reach Feed once the container is shrunk/offset.
 @export var use_manual_input_forwarding := false
-@export var phone_frame_scene: PackedScene
 @export var feed_container: SubViewportContainer
 @export var sub_viewport: SubViewport
 @export var feed: Control

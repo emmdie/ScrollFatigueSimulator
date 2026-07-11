@@ -2,7 +2,6 @@
 
 [ext_resource type="Script" uid="uid://cg60m2ropj1mb" path="res://framing/frame_host.gd" id="1_twvpn"]
 [ext_resource type="PackedScene" uid="uid://budcv581qpjra" path="res://feed/feed.tscn" id="2_t1c1x"]
-[ext_resource type="PackedScene" uid="uid://8taix7wbgvqu" path="res://framing/frames/phone_frame.tscn" id="2_xdl3u"]
 [ext_resource type="Script" uid="uid://dxf2jwqvf21co" path="res://feed/dwell_tracker.gd" id="5_2ywpr"]
 
 [node name="FrameHost" type="Control" unique_id=135994993 node_paths=PackedStringArray("feed_container", "sub_viewport", "feed", "decoration_layer")]
@@ -10,7 +9,6 @@ custom_minimum_size = Vector2(607.5, 1080)
 layout_mode = 3
 anchors_preset = 0
 script = ExtResource("1_twvpn")
-phone_frame_scene = ExtResource("2_xdl3u")
 feed_container = NodePath("FeedContainer")
 sub_viewport = NodePath("FeedContainer/SubViewport")
 feed = NodePath("FeedContainer/SubViewport/Feed")
