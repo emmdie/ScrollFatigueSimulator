@@ -226,10 +226,6 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 
 - **Distortion reading as "fatigue" not "glitch"**: subtle shader work (chromatic aberration, softening, wave warp), ease-in curve. *(Open — shaders not built.)*
 - **Text distortion**: Label/RichTextLabel don't warp easily; options are a Viewport-rendered text texture + `text_distort.gdshader`, or per-character `RichTextEffect`. *(Open.)*
-- **Input forwarding through a scaled SubViewportContainer**: *(Resolved — §2.)*
-- **Decoupling scroll speed from fatigue**: velocity-based, not item-count-based. *(Done — `feed.gd`'s `_update_fatigue`.)*
-- **Dwell detection forgiveness window**: brief pauses shouldn't trigger focus, only sustained stillness. *(Done — §3a.)*
-- **API latency variance**: *(Done — 12s/20s timeouts + fallback text, §5.)*
 - **Exported build + external assets**: path resolution logic done in `content_library.gd`/`external_bridge.gd`; still needs verification on real kiosk hardware.
 - **Session reset integrity**: `state_machine.gd` clears `SessionData`/reshuffles on REVERTING; scene-level cleanup (`Feed.reset()`, bare framing) owned by `main.gd`. *(Done.)*
 

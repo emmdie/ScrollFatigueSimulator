@@ -15,10 +15,15 @@ script = ExtResource("1_0cxo7")
 feed_slot_path = NodePath("PictureFrame/FeedSlot")
 
 [node name="PictureFrame" type="TextureRect" parent="." unique_id=2006203135]
+clip_children = 2
+clip_contents = true
 layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
+anchors_preset = 13
+anchor_left = 0.5
+anchor_right = 0.5
 anchor_bottom = 1.0
+offset_left = -640.73755
+offset_right = 640.73755
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -27,10 +32,11 @@ expand_mode = 3
 stretch_mode = 4
 
 [node name="FeedSlot" type="Control" parent="PictureFrame" unique_id=1223710787]
-custom_minimum_size = Vector2(1080, 1920)
+custom_minimum_size = Vector2(1080, 960)
 anchors_preset = 0
 offset_left = 55.0
 offset_top = 39.0
 offset_right = 1135.0
-offset_bottom = 1959.0
+offset_bottom = 999.0
+scale = Vector2(1.07, 1.07)
 mouse_filter = 2

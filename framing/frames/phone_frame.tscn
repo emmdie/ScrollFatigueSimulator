@@ -12,20 +12,28 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("1_nfjil")
+feed_slot_path = NodePath("PhoneDecoration/FeedSlot")
 
 [node name="PhoneDecoration" type="TextureRect" parent="." unique_id=1919428116]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
+layout_mode = 1
+anchors_preset = 13
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -360.0
+offset_right = 360.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 texture = ExtResource("2_k0yeh")
 
-[node name="FeedSlot" type="Control" parent="." unique_id=1272187085]
-custom_minimum_size = Vector2(1080, 1920)
+[node name="FeedSlot" type="Control" parent="PhoneDecoration" unique_id=1272187085]
+clip_children = 2
+custom_minimum_size = Vector2(950, 1920)
 anchors_preset = 0
-offset_left = 165.0
-offset_top = 168.0
-offset_right = 1245.0
-offset_bottom = 2088.0
+offset_left = 185.0
+offset_top = 167.0
+offset_right = 1185.0
+offset_bottom = 2087.0
 scale = Vector2(0.38, 0.38)
 mouse_filter = 2
