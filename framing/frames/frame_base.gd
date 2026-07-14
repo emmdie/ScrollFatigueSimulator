@@ -20,9 +20,12 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
-## Global-space rect the feed container should be tweened to while this frame is active.
+## Global-space rect the feed clip should be tweened to while this frame is
+## active. Uses the global transform so editor `scale` on FeedSlot is honored
+## (Control.get_global_rect() ignores it).
 func get_feed_global_rect() -> Rect2:
-	return feed_slot.get_global_rect()
+	var xf := feed_slot.get_global_transform()
+	return Rect2(xf.origin, xf.get_scale() * feed_slot.size)
 
 
 ## Called by frame_host right after this frame is added to DecorationLayer.

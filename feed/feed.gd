@@ -37,6 +37,12 @@ signal first_interaction
 @export var fatigue_decay_rate: float = 0.12 # fatigue lost per second while idle
 @export var max_fatigue: float = 1.0
 @export var per_card_jitter: float = 0.12 # randomizes distortion slightly per card so it isn't uniform
+@export_group("Snap")
+## Seconds of near-stillness before the top card tweens fully into view.
+@export var snap_delay: float = 1.0
+@export var snap_duration: float = 0.45
+## Below this |velocity| (px/s) the feed counts as still for snapping.
+@export var snap_velocity_threshold: float = 40.0
 
 var scrolling_locked: bool = false
 var _slots: Array = [] # each: { node: Control, logical_index: int, jitter: float }
@@ -47,6 +53,8 @@ var _active_touch_index: int = -1
 var _has_interacted: bool = false
 var _fatigue: float = 0.0
 var _nearest_slot_index: int = -1
+var _still_time: float = 0.0
+var _snap_tween: Tween
 var _rng := RandomNumberGenerator.new()
 
 
@@ -57,7 +65,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not scrolling_locked and not _dragging:
+	if not scrolling_locked and not _dragging and not _is_snapping():
 		_scroll_offset += _velocity * delta
 		var friction := absf(_velocity) * momentum_damping * delta + 40.0 * delta
 		_velocity = move_toward(_velocity, 0.0, friction)
@@ -65,8 +73,10 @@ func _process(delta: float) -> void:
 	_layout_slots()
 	_recycle_slots()
 	_update_fatigue(delta)
+	SessionData.scroll_velocity = absf(_velocity)
 	_apply_distortion()
 	_update_nearest_slot()
+	_update_snap(delta)
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -109,7 +119,10 @@ func reset() -> void:
 	_active_touch_index = -1
 	_has_interacted = false
 	_nearest_slot_index = -1
+	_still_time = 0.0
+	_cancel_snap()
 	SessionData.fatigue = 0.0
+	SessionData.scroll_velocity = 0.0
 	_build_pool()
 	if prompt_finger and prompt_finger.has_method("reset"):
 		prompt_finger.reset()
@@ -177,6 +190,7 @@ func _recycle_slots() -> void:
 
 
 func _start_drag(touch_index: int) -> void:
+	_cancel_snap()
 	_dragging = true
 	_active_touch_index = touch_index
 	_velocity = 0.0
@@ -222,14 +236,13 @@ func _apply_distortion() -> void:
 			slot.node.set_distortion(value)
 
 
+## "Nearest" = the card whose top edge is closest to the top of the feed —
+## that's the one a stopped scroll settles on (and the one snapping aligns).
 func _update_nearest_slot() -> void:
-	var center := size.y * 0.5
 	var best_index := -1
 	var best_dist := INF
 	for i in _slots.size():
-		var slot = _slots[i]
-		var card_center: float = slot.node.position.y + item_height * 0.5
-		var dist: float = absf(card_center - center)
+		var dist: float = absf(_slots[i].node.position.y)
 		if dist < best_dist:
 			best_dist = dist
 			best_index = i
@@ -239,3 +252,39 @@ func _update_nearest_slot() -> void:
 		var slot = _slots[best_index]
 		var data: Dictionary = slot.node.get_meta("artwork_data", { })
 		nearest_card_changed.emit(slot.node, data)
+
+
+## --- Snap-to-top: after snap_delay of stillness, tween the nearest card so it
+## sits fully in view at the top of the feed. Cancelled by any new drag.
+func _update_snap(delta: float) -> void:
+	if scrolling_locked or _dragging or _is_snapping() or _nearest_slot_index == -1:
+		_still_time = 0.0
+		return
+	if absf(_velocity) >= snap_velocity_threshold:
+		_still_time = 0.0
+		return
+	_still_time += delta
+	if _still_time >= snap_delay:
+		_start_snap()
+
+
+func _start_snap() -> void:
+	_still_time = 0.0
+	var step := item_height + item_spacing
+	var target := float(_slots[_nearest_slot_index].logical_index) * step
+	if is_equal_approx(target, _scroll_offset):
+		return
+	_velocity = 0.0
+	_snap_tween = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	_snap_tween.tween_property(self, "_scroll_offset", target, snap_duration)
+
+
+func _is_snapping() -> bool:
+	return _snap_tween != null and _snap_tween.is_running()
+
+
+func _cancel_snap() -> void:
+	if _snap_tween:
+		_snap_tween.kill()
+		_snap_tween = null
+	_still_time = 0.0

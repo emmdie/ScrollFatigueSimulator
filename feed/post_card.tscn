@@ -8,6 +8,8 @@
 width = 1024
 height = 1024
 seamless = true
+seamless_blend_skirt = 1.0
+bump_strength = 17.4
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_dof02"]
 shader = ExtResource("3_dof02")
@@ -42,6 +44,7 @@ offset_right = -80.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+color = Color(0.98039216, 0.9843137, 0.9647059, 1)
 
 [node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1321111613]
 layout_mode = 0
@@ -70,8 +73,9 @@ layout_mode = 2
 text = "The Kiss"
 
 [node name="BorderLine" type="ColorRect" parent="VBoxContainer" unique_id=1117227177]
-custom_minimum_size = Vector2(800, 2)
+custom_minimum_size = Vector2(940, 4)
 layout_mode = 2
+size_flags_horizontal = 4
 mouse_filter = 2
 color = Color(0.3372549, 0.3529412, 0.45882353, 1)
 

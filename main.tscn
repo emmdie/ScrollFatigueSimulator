@@ -17,9 +17,9 @@ shader_parameter/polar_repeat = 1.0
 shader_parameter/spin_rotation = 0.0
 shader_parameter/spin_speed = 1.0
 shader_parameter/offset = Vector2(0, 0)
-shader_parameter/colour_1 = Color(0, 0.7490196, 0, 1)
-shader_parameter/colour_2 = Color(0, 0.70980394, 0, 1)
-shader_parameter/colour_3 = Color(0, 0, 0, 1)
+shader_parameter/colour_1 = Color(0.98039216, 0.9843137, 0.9647059, 1)
+shader_parameter/colour_2 = Color(0.7764706, 0.7176471, 0.74509805, 1)
+shader_parameter/colour_3 = Color(0.3372549, 0.3529412, 0.45882353, 1)
 shader_parameter/contrast = 2.0
 shader_parameter/spin_amount = 0.36
 shader_parameter/pixel_filter = 2000.0
@@ -33,8 +33,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_0xm2m")
 frame_host = NodePath("FrameHost")
-phone_frame_scene = ExtResource("2_lquwl")
-picture_frame_scene = ExtResource("3_272bh")
+escalation_frames = Array[PackedScene]([ExtResource("3_272bh"), ExtResource("2_lquwl")])
 focus_frame_scene = ExtResource("3_7mycd")
 
 [node name="ColorRect" type="ColorRect" parent="." unique_id=2097490940]

@@ -8,12 +8,13 @@
 [node name="Feed" type="Control" unique_id=215067885 node_paths=PackedStringArray("card_container", "prompt_finger")]
 custom_minimum_size = Vector2(1080, 1920)
 layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_bottom = 840.0
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -540.0
+offset_right = 540.0
+offset_bottom = 1920.0
 grow_horizontal = 2
-grow_vertical = 2
 script = ExtResource("1_4aggq")
 post_card_scene = ExtResource("2_0toap")
 card_container = NodePath("CardHolder")

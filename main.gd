@@ -5,20 +5,27 @@ extends Control
 ## REVERTING) is owned by its own node; main.gd only orchestrates framing and the
 ## IDLE / REVERTING bookends.
 
-enum FrameLevel { BARE, PHONE, PICTURE }
-
 @export var frame_host: FrameHost
 @export_group("Frames")
-@export var phone_frame_scene: PackedScene
-@export var picture_frame_scene: PackedScene # optional: leave null until picture_frame exists
+## Ordered mildest -> strongest. During DISTORTING, fatigue walks up this list;
+## level 0 is bare fullscreen, level i is escalation_frames[i-1]. focus_frame is
+## conceptually the final frame but stays separate — it's entered via the
+## FOCUSING state, not fatigue. Add new frames by appending scene + threshold.
+@export var escalation_frames: Array[PackedScene] = []
+## Fatigue at which escalation_frames[i] appears. Same length, ascending.
+@export var escalation_thresholds: Array[float] = [0.35, 0.70]
 @export var focus_frame_scene: PackedScene
-@export_group("Fatigue -> frame escalation (DISTORTING)")
-@export_range(0.0, 1.0) var phone_frame_fatigue: float = 0.35
-@export_range(0.0, 1.0) var picture_frame_fatigue: float = 0.70
+@export_group("Escalation feel")
+## Fatigue must fall this far BELOW a level's threshold before stepping back
+## down — stopping right after a frame appeared won't immediately undo it.
+@export var de_escalation_hysteresis: float = 0.15
+## Minimum seconds any framing level is held before it may change again.
+@export var min_frame_hold: float = 2.5
 @export_group("Revert")
 @export var revert_settle_time: float = 0.6
 
-var _distort_level: int = -1 # last FrameLevel applied during DISTORTING; -1 = unset
+var _level: int = 0 # 0 = bare, i = escalation_frames[i-1]
+var _level_age: float = 0.0
 
 # Feed lives inside frame_host's SubViewport; frame_host exposes it as @export var feed.
 @onready var _feed: Control = frame_host.feed
@@ -26,22 +33,27 @@ var _distort_level: int = -1 # last FrameLevel applied during DISTORTING; -1 = u
 
 func _ready() -> void:
 	set_process(false) # only polls fatigue while DISTORTING
+	if escalation_frames.size() != escalation_thresholds.size():
+		push_warning("main.gd: escalation_frames and escalation_thresholds lengths differ; extra entries ignored")
 	StateMachine.state_changed.connect(_on_state_changed)
 	_feed.first_interaction.connect(StateMachine.notify_first_interaction)
 	frame_host.to_bare_fullscreen()
 
 
-func _process(_delta: float) -> void:
-	_apply_distort_framing(SessionData.fatigue)
+func _process(delta: float) -> void:
+	_apply_distort_framing(delta)
 
 
 func _on_state_changed(_previous: int, current: int) -> void:
 	set_process(current == StateMachine.STATE.DISTORTING)
 	match current:
 		StateMachine.STATE.IDLE:
-			frame_host.to_bare_fullscreen()
+			_set_level(0)
 		StateMachine.STATE.DISTORTING:
-			_distort_level = -1 # force re-eval on entry AND on cancel-back from FOCUSING
+			# Re-apply the current level's framing: covers both first entry
+			# (level 0 -> no-op) and cancel-back from FOCUSING, where the
+			# focus frame must yield to whatever escalation level we were at.
+			_set_level(_level)
 		StateMachine.STATE.FOCUSING:
 			frame_host.show_frame(focus_frame_scene)
 		StateMachine.STATE.REVERTING:
@@ -50,27 +62,32 @@ func _on_state_changed(_previous: int, current: int) -> void:
 		# PRINTING:  focus_frame + printing_overlay own this edge
 
 
-func _apply_distort_framing(fatigue: float) -> void:
-	var level := FrameLevel.BARE
-	if picture_frame_scene != null and fatigue >= picture_frame_fatigue:
-		level = FrameLevel.PICTURE
-	elif fatigue >= phone_frame_fatigue:
-		level = FrameLevel.PHONE
-	if level == _distort_level:
+func _apply_distort_framing(delta: float) -> void:
+	_level_age += delta
+	if _level_age < min_frame_hold:
 		return
-	_distort_level = level
-	match level:
-		FrameLevel.BARE:
-			frame_host.to_bare_fullscreen()
-		FrameLevel.PHONE:
-			frame_host.show_frame(phone_frame_scene)
-		FrameLevel.PICTURE:
-			frame_host.show_frame(picture_frame_scene)
+	var fatigue := SessionData.fatigue
+	var max_level := mini(escalation_frames.size(), escalation_thresholds.size())
+	if _level < max_level and fatigue >= escalation_thresholds[_level]:
+		_set_level(_level + 1)
+	elif _level > 0 and fatigue < escalation_thresholds[_level - 1] - de_escalation_hysteresis:
+		_set_level(_level - 1)
+
+
+func _set_level(level: int) -> void:
+	_level = level
+	_level_age = 0.0
+	if level == 0:
+		frame_host.to_bare_fullscreen()
+	else:
+		frame_host.show_frame(escalation_frames[level - 1])
 
 
 func _revert() -> void:
 	# StateMachine._on_enter() runs SessionData.reset() + ContentLibrary.reshuffle_order()
 	# before emitting state_changed, so Feed.reset() rebuilds from the fresh shuffle.
+	_level = 0
+	_level_age = 0.0
 	_feed.reset()
 	frame_host.to_bare_fullscreen()
 	await get_tree().create_timer(revert_settle_time).timeout

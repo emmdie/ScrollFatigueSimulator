@@ -32,11 +32,12 @@ expand_mode = 3
 stretch_mode = 4
 
 [node name="FeedSlot" type="Control" parent="PictureFrame" unique_id=1223710787]
-custom_minimum_size = Vector2(1080, 960)
+show_behind_parent = true
+custom_minimum_size = Vector2(1080, 915)
 anchors_preset = 0
 offset_left = 55.0
 offset_top = 39.0
 offset_right = 1135.0
-offset_bottom = 999.0
+offset_bottom = 954.0
 scale = Vector2(1.07, 1.07)
 mouse_filter = 2

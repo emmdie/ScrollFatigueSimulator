@@ -15,6 +15,7 @@ script = ExtResource("1_nfjil")
 feed_slot_path = NodePath("PhoneDecoration/FeedSlot")
 
 [node name="PhoneDecoration" type="TextureRect" parent="." unique_id=1919428116]
+z_index = 1
 layout_mode = 1
 anchors_preset = 13
 anchor_left = 0.5
@@ -28,6 +29,7 @@ mouse_filter = 2
 texture = ExtResource("2_k0yeh")
 
 [node name="FeedSlot" type="Control" parent="PhoneDecoration" unique_id=1272187085]
+show_behind_parent = true
 clip_children = 2
 custom_minimum_size = Vector2(950, 1920)
 anchors_preset = 0
