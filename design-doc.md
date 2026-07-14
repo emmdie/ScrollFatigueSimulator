@@ -9,12 +9,12 @@ Godot software for an artistic vision of "scroll fatigue" — engagement with ea
 
 ## Implementation Status (read second, right after §0)
 
-- **Built:** `feed/` (post_card, feed, prompt_finger, dwell_tracker), all four `autoload/` singletons (`content_library`, `session_data`, `state_machine`, `external_bridge`), `shaders/image_distort.gdshader`, `framing/` (`frame_base`, `frame_host`, `phone_frame`, `focus_frame`), `printing/printing_overlay`, `printing/horoscope_client`, and `main/` (`main.tscn`, `main.gd`) — see §1 tree for what each does.
+- **Built:** `feed/` (post_card, feed, prompt_finger, dwell_tracker), all four `autoload/` singletons (`content_library`, `session_data`, `state_machine`, `external_bridge`), `shaders/image_distort.gdshader`, `framing/` (`frame_base`, `frame_host`, `phone_frame`, `picture_frame`, `focus_frame`), `printing/printing_overlay`, `printing/horoscope_client`, and `main/` (`main.tscn`, `main.gd`) — see §1 tree for what each does.
 - **Mocked:** `external/horoscope_api.py`, `external/print_job.py` — match the §5 CLI contract but return canned/templated results; swap for the real you.com API and printer hardware later (§7 step 7).
-- **Not built:** `picture_frame`, `printing/result_card`, `text_distort`/`feed_distort` shaders.
-- **`main.gd` is the conductor** (§3a): forwards `Feed.first_interaction` → `StateMachine.notify_first_interaction()`, maps `StateMachine.state_changed` onto `frame_host` framing (incl. fatigue-driven DISTORTING escalation), and owns REVERTING cleanup (`Feed.reset()` + bare framing → `request_idle()`). `dwell_tracker.gd` (FOCUSING edge) and `printing_overlay.gd` (PRINTING edge) stay wired to `StateMachine`/`ExternalBridge` directly; `main.gd` does not duplicate them.
-- `feed.gd` never reads or drives `StateMachine` — it only exposes `set_scroll_locked()`, `reset()`, and `nearest_card_changed`/`first_interaction` signals (§2a). Whoever owns dwell/framing/FSM calls into Feed, never the reverse.
-- `post_card.tscn`'s `ArtworkRect` carries the distortion `ShaderMaterial` directly (no `CanvasGroup`); captions are unaffected.
+- **Not built:** `printing/result_card`, `text_distort`/`feed_distort` shaders.
+- **`main.gd` is the conductor** (§3a): forwards `Feed.first_interaction` → `StateMachine.notify_first_interaction()`, maps `StateMachine.state_changed` onto `frame_host` framing (incl. the fatigue-driven escalation ladder, §3b), and owns REVERTING cleanup (`Feed.reset()` + bare framing → `request_idle()`). `dwell_tracker.gd` (FOCUSING edge) and `printing_overlay.gd` (PRINTING edge) stay wired to `StateMachine`/`ExternalBridge` directly; `main.gd` does not duplicate them.
+- `feed.gd` never reads or drives `StateMachine` — it only exposes `set_scroll_locked()`, `reset()`, and `nearest_card_changed`/`first_interaction` signals (§2a). Whoever owns dwell/framing/FSM calls into Feed, never the reverse. Feed publishes `SessionData.fatigue` **and** `SessionData.scroll_velocity` every frame.
+- `post_card.tscn`'s `ArtworkRect` carries the distortion `ShaderMaterial` (no `CanvasGroup`); `post_card.gd` duplicates it per instance in `_ready()` so per-card jitter works (materials are otherwise shared across scene instances).
 - `frame_host.gd` exposes `@export var feed` (the inner SubViewport Feed); `main.gd` reads it as `frame_host.feed`. `DwellTracker` lives inside `frame_host.tscn` beside the Feed so its own `@export feed` resolves without editable children.
 
 ## 0. Structural Conventions
@@ -42,11 +42,13 @@ res://
 │
 ├── main/
 │   ├── main.tscn              # ✅ root Control: FrameHost + PrintingOverlay instances. Project main scene.
-│   └── main.gd                # ✅ conductor: first_interaction->FSM, state_changed->framing, REVERTING cleanup. §3a.
+│   └── main.gd                # ✅ conductor: first_interaction->FSM, state_changed->framing, escalation
+│                              #   ladder (§3b), REVERTING cleanup. §3a.
 │
 ├── feed/                      # everything that lives INSIDE the SubViewport
-│   ├── feed.tscn / feed.gd    # ✅ recycled post_card pool, drag/momentum scroll, fatigue accumulation,
-│   │                          #   per-card distortion, nearest-card signal. See §1a, §2a.
+│   ├── feed.tscn / feed.gd    # ✅ recycled post_card pool, drag/momentum scroll, fatigue + scroll_velocity
+│   │                          #   publishing, per-card distortion, top-anchored nearest-card signal,
+│   │                          #   snap-to-top after stillness. See §1a, §2a.
 │   ├── post_card.tscn / .gd   # ✅ setup(artist,title,texture), set_distortion(0..1) via ArtworkRect's
 │   │                          #   pre-assigned ShaderMaterial.
 │   ├── dwell_tracker.gd       # ✅ @export var feed; polls SessionData.scroll_velocity against
@@ -55,16 +57,18 @@ res://
 │   └── prompt_finger.tscn/.gd # ✅ looping swipe tween; dismiss()/reset() fade out/in. Wired into feed.gd.
 │
 ├── framing/                   # presents the SubViewport in a context
-│   ├── frame_host.tscn        # ✅ FrameHost (Control) > FeedContainer (SubViewportContainer > SubViewport >
-│   │                          #   Feed instance) + DecorationLayer (Ignore) + DwellTracker. Exposes @export feed.
-│   ├── frame_host.gd          # ✅ to_bare_fullscreen()/show_frame(PackedScene) tween FeedContainer to the
-│   │                          #   active frame's FeedSlot rect, aspect-fit clamped (see §2), crossfade
-│   │                          #   decoration via FrameBase.enter/exit. Manual push_input() fallback wired,
-│   │                          #   off by default.
+│   ├── frame_host.tscn        # ✅ FrameHost (Control) > FeedClip (clip_contents) > FeedContainer
+│   │                          #   (SubViewportContainer > SubViewport > Feed) + DecorationLayer (Ignore)
+│   │                          #   + DwellTracker. Exposes @export feed.
+│   ├── frame_host.gd          # ✅ to_bare_fullscreen()/show_frame(PackedScene) tween FeedClip to the
+│   │                          #   active frame's FeedSlot rect; feed is cover-fit inside, top-anchored,
+│   │                          #   never stretched (see §2). Crossfade decoration via FrameBase.enter/exit.
+│   │                          #   Manual push_input() fallback wired, off by default.
 │   ├── frame_base.gd          # ✅ abstract: feed_slot_path, get_feed_global_rect(), enter()/exit().
 │   └── frames/
 │       ├── phone_frame.tscn/.gd  # ✅ placeholder hand+phone decoration + FeedSlot.
-│       ├── picture_frame.tscn/.gd # ⬜ same pattern as phone_frame.
+│       ├── picture_frame.tscn/.gd # ✅ same pattern as phone_frame; slotted into main.gd's
+│       │                           #   escalation_frames list (§3b) like any future frame.
 │       └── focus_frame.tscn/.gd   # ✅ FeedSlot = full-bleed rect + progress bar chrome (chrome only,
 │                                   #   not yet driven). enter() fades in then calls request_printing()
 │                                   #   once complete. See §3a.
@@ -129,7 +133,8 @@ func reshuffle_order() -> void                     # called by state_machine.gd 
 ```
 ```gdscript
 # SessionData (autoload)
-var fatigue: float   # Feed writes every frame; other systems read, don't recompute
+var fatigue: float          # Feed writes every frame; other systems read, don't recompute
+var scroll_velocity: float  # Feed writes every frame; dwell_tracker's stillness source
 ```
 
 - `get_artwork(order_index)` indexes `content_library.gd`'s internal shuffled run order, not the manifest array or `id`.
@@ -140,11 +145,14 @@ var fatigue: float   # Feed writes every frame; other systems read, don't recomp
 
 **Decision: render the feed into a fixed-resolution `SubViewport`, present it through a `SubViewportContainer` whose rect is tweened by `frame_host.gd`. Frames are decoration scenes swapped around that container.** This beats a Camera2D zoom rig because the feed literally never changes — only its container does — and it composites cleanly into a phone-screen or picture-frame cutout without a redundant second transform system.
 
+**Node chain (as built):** `FrameHost > FeedClip (Control, clip_contents) > FeedContainer (SubViewportContainer) > SubViewport > Feed`. `frame_host.gd` tweens **FeedClip** to the active frame's FeedSlot rect; inside it, `_apply_cover()` sizes FeedContainer as an aspect-preserving *cover* fit at `feed_resolution`'s ratio — anchored top, centered horizontally. FeedSlots whose ratio doesn't match the feed crop the feed's **bottom** (or sides), never stretch it; the top edge stays intact because that's where the selected card sits (§2a snap).
+
 **Resolved implementation gotchas** (all in `frame_host.gd`):
-- `SubViewport.size` is driven automatically by its parent `SubViewportContainer` and is read-only in the editor. Use `size_2d_override` (+ `size_2d_override_stretch = true`) to give the feed a fixed internal render resolution independent of however small the container currently is — set both at runtime in `_ready()`, don't rely on the `.tscn`.
-- `stretch = true` on the container will distort (non-uniformly squish) the feed whenever the target rect's aspect ratio doesn't match `size_2d_override`'s. `_tween_container_to()` routes every target rect through `_aspect_fit()` first, which fits+letterboxes instead of stretching — applies to bare fullscreen too, not just framed states.
-- Built-in `SubViewportContainer` input forwarding (via `stretch = true`) works out of the box; a manual `push_input()` remap exists behind `use_manual_input_forwarding` (off by default) only as a fallback if a given kiosk misbehaves.
-- Decoration nodes must be `mouse_filter = IGNORE` so the shrunk feed stays the touch target under PhoneFrame etc.
+- `SubViewport.size` is driven by the parent `SubViewportContainer` and is read-only. `_ready()` sets `size_2d_override = feed_resolution` (`@export`, default 1080×1920) + `size_2d_override_stretch = true` at runtime — the `.tscn` values are not relied on.
+- `FrameBase.get_feed_global_rect()` builds its rect from the FeedSlot's **global transform**, so editor `scale` on a FeedSlot is honored (`Control.get_global_rect()` ignores scale).
+- `show_frame()` re-checks `current_frame` after its one-frame layout `await` — a framing change that lands during the await supersedes it cleanly.
+- Built-in `SubViewportContainer` input forwarding (via `stretch = true`) works out of the box; a manual `push_input()` remap exists behind `use_manual_input_forwarding` (off by default) as a kiosk fallback.
+- Decoration nodes must be `mouse_filter = IGNORE`; FeedClip is `PASS`, so the shrunk feed stays the touch target under PhoneFrame etc.
 
 ## 2a. Feed's Public API (as built)
 
@@ -159,7 +167,9 @@ signal nearest_card_changed(post_card: Control, artwork_data: Dictionary)
 signal first_interaction
 ```
 
-`fatigue` isn't exposed on Feed directly — read `SessionData.fatigue` (§1a).
+- `fatigue` isn't exposed on Feed directly — read `SessionData.fatigue`; likewise `SessionData.scroll_velocity` is written by Feed every frame (dwell_tracker depends on it).
+- **"Nearest" card = the one whose top edge is closest to the top of the feed** (not the center) — a stopped scroll settles on the topmost post.
+- **Snap-to-top:** after `snap_delay` (1.0s) of near-stillness (`|velocity| < snap_velocity_threshold`), Feed tweens `_scroll_offset` (`snap_duration`, 0.45s) so the nearest card is fully in view, top-aligned. Any new drag cancels it; a snap already running when `set_scroll_locked(true)` arrives is allowed to finish (it aligns the focused card). Tune `dwell_threshold` ≥ ~2.0s so the snap completes before FOCUSING fires.
 
 ## 3. Core State Machine
 
@@ -169,8 +179,8 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 
 - **IDLE**: prompt finger animates, no distortion, bare fullscreen framing.
 - **SCROLLING**: swipe/drag increments `fatigue`; prompt finger fades permanently on first interaction.
-- **DISTORTING**: `fatigue` drives (a) per-card shader distortion and (b) frame escalation (bare → phone_frame → picture_frame) — two independently tunable curves.
-- **FOCUSING**: single post centered past `dwell_threshold` (with a forgiveness window) tweens fatigue to 0 for that post, then frame_host scales up to focus_frame. Cancels cleanly back to DISTORTING if the visitor scrolls away mid-tween.
+- **DISTORTING**: `fatigue` drives (a) per-card shader distortion and (b) the frame escalation ladder (§3b) — two independently tunable curves.
+- **FOCUSING**: the top-aligned post held past `dwell_threshold` (with a forgiveness window), then frame_host scales up to focus_frame. Cancels cleanly back to DISTORTING (restoring the prior escalation level, §3b) if the visitor scrolls away mid-tween.
 - **PRINTING**: focus_frame locks input; printing_overlay shows a two-phase bar (0–50% horoscope API, 50–100% print) since the two durations are unrelated.
 - **REVERTING**: reset shader uniforms/timers/thread state, frame_host back to bare, clear SessionData, reshuffle feed, back to IDLE.
 
@@ -191,10 +201,17 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 - Each frame, compares `SessionData.scroll_velocity` to `velocity_still_threshold`: below it, accumulates `_dwell_elapsed`; at/above it, accumulates `_motion_elapsed` and only resets the dwell timer once `_motion_elapsed >= forgiveness_window` — a brief nudge doesn't cost progress, sustained motion does.
 - `_dwell_elapsed >= dwell_threshold` → `feed.set_scroll_locked(true)`, writes `SessionData.current_artwork`/`dwell_elapsed`, calls `StateMachine.request_focus()`.
 - A new `nearest_card_changed` while focused calls `StateMachine.cancel_focus()` + unlocks the feed before tracking the new card — covers the "scrolled away mid-tween" cancel path.
-- Exported knobs: `dwell_threshold` (1.2s default), `forgiveness_window` (0.3s), `velocity_still_threshold` (40 px/s).
+- Exported knobs: `dwell_threshold` (set ≥ ~2.0s in the editor so Feed's snap-to-top (§2a) finishes first), `forgiveness_window` (0.3s), `velocity_still_threshold` (40 px/s).
 - `focus_frame.gd` (extends `FrameBase`, same pattern as `phone_frame`) owns the FOCUSING → PRINTING edge: `enter(duration: float) -> void` (signature from `FrameBase`, driven by `frame_host`'s crossfade timing) fades the frame in, then calls `StateMachine.request_printing()` once the fade completes. `exit(duration: float) -> Tween` returns its tween so `frame_host` can await it before swapping frames. Its `progress_bar` export is chrome only — `printing_overlay.gd` (unbuilt) will drive its value later.
-- `main.gd` (`main/`, extends `Control`) owns framing orchestration and the IDLE/REVERTING bookends. In `_ready()` it connects `Feed.first_interaction -> StateMachine.notify_first_interaction` and `StateMachine.state_changed -> _on_state_changed`, then sets bare framing. Per state: IDLE → `to_bare_fullscreen()`; DISTORTING → polls `SessionData.fatigue` in `_process` and escalates bare → `phone_frame` → `picture_frame` at `@export` thresholds (`picture_frame_scene` optional — caps at phone until built); FOCUSING → `show_frame(focus_frame_scene)`; PRINTING → no-op (owned by focus_frame + printing_overlay); REVERTING → `Feed.reset()` + `to_bare_fullscreen()`, then `request_idle()` after `revert_settle_time`. Reads the Feed via `frame_host.feed`. `debug_state_router.gd` is deleted.
+- `main.gd` (`main/`, extends `Control`) owns framing orchestration and the IDLE/REVERTING bookends. In `_ready()` it connects `Feed.first_interaction -> StateMachine.notify_first_interaction` and `StateMachine.state_changed -> _on_state_changed`, then sets bare framing. Per state: IDLE → level 0 (bare); DISTORTING → escalation ladder (§3b), re-applying the current level on entry (covers cancel-back from FOCUSING); FOCUSING → `show_frame(focus_frame_scene)`; PRINTING → no-op (owned by focus_frame + printing_overlay); REVERTING → level 0 + `Feed.reset()` + bare, then `request_idle()` after `revert_settle_time`. Reads the Feed via `frame_host.feed`.
 - PRINTING resolves on its own: `printing_overlay.gd` drives `focus_frame`'s progress bar and calls `StateMachine.request_revert()` once the (mocked) horoscope + print calls both land.
+
+## 3b. Frame Escalation Ladder (`main.gd`)
+
+- Frames are an **ordered list**: `@export var escalation_frames: Array[PackedScene]` (mildest → strongest) with matching ascending `escalation_thresholds: Array[float]`. Level 0 = bare fullscreen; level *i* = `escalation_frames[i-1]`. Adding a frame = append scene + threshold in the editor, no code change. `focus_frame` is conceptually the final frame but is entered via the FOCUSING state, never by fatigue.
+- Escalation is deliberately sluggish, one step at a time:
+  - `min_frame_hold` (2.5s): a level must be held that long before any change, up or down.
+  - `de_escalation_hysteresis` (0.15): fatigue must drop that far *below* the level's threshold before stepping back down — stopping right after a frame appears doesn't immediately undo it.
 
 ## 4. Content Loading
 
@@ -234,7 +251,7 @@ IDLE → SCROLLING → DISTORTING → (dwell timeout) FOCUSING → PRINTING → 
 1. Content loading + feed + prompt finger, no distortion. **Done.**
 2. Image distortion shader + debug slider. **Done.**
 3. Fatigue accumulation from real scroll input. **Done** — `feed.gd`'s `_update_fatigue` → `SessionData.fatigue`.
-4. **Framing spike**: **Done.** `frame_host`/`frame_base`/`phone_frame`/`focus_frame` built (`picture_frame` remains, same pattern); SubViewport sizing and aspect-ratio distortion bugs resolved (§2).
+4. **Framing spike**: **Done.** `frame_host`/`frame_base` + all frames built; feed is clipped + cover-fit (top-anchored) so mismatched FeedSlot ratios crop instead of stretch (§2). Frames escalate via `main.gd`'s ordered list (§3b).
 5. Dwell detection + FOCUSING transition: **Done** (§3a) via `dwell_tracker.gd` + `focus_frame.gd`, now driven through `main.gd`.
 6. External script plumbing. **Done with mocks** — `external_bridge.gd`, `horoscope_client.gd`, `printing_overlay.gd` all built; `horoscope_api.py`/`print_job.py` mocked per §5 CLI contract.
 7. Swap in real you.com API and printer hardware.
