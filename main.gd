@@ -66,7 +66,7 @@ func _apply_distort_framing(delta: float) -> void:
 	_level_age += delta
 	if _level_age < min_frame_hold:
 		return
-	var fatigue := SessionData.fatigue
+	var fatigue = SessionData.fatigue
 	var max_level := mini(escalation_frames.size(), escalation_thresholds.size())
 	if _level < max_level and fatigue >= escalation_thresholds[_level]:
 		_set_level(_level + 1)

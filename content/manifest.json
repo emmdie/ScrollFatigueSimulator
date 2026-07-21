@@ -17,7 +17,124 @@
 			]
 		},
 		{
-			"id": "vermeer_pearl_earring",
+			"id": "RitzBuilding",
+			"file": "artworks/RitzBuilding.jpg",
+			"title": "Ritz Building",
+			"artist": "photography in high resolution by John Margolies",
+			"date": "2003",
+			"tags": [
+				"Pink",
+				"Hotel",
+				"Photography",
+				"moden design",
+				"architecture",
+				"America"
+			]
+		},
+		{
+			"id": "head_of_buddha",
+			"file": "artworks/head_of_buddha.jpg",
+			"title": "Head of Buddha",
+			"artist": "Reijer Stolk",
+			"date": "1943",
+			"tags": [
+				"Buddhism",
+				"Simplicity",
+				"Meditation",
+				"Black",
+				"Tranquility",
+				"East asia"
+			]
+		},
+		{
+			"id": "Orchids",
+			"file": "artworks/orchids.jpg",
+			"title": "Orchids",
+			"artist": "Theo van Hoytema",
+			"date": "1900",
+			"tags": [
+				"Flowers",
+				"Oddly creepy",
+				"Black and White",
+				"Print",
+				"Orchids",
+				"Praying Mantis"
+			]
+		},
+		{
+			"id": "cupid",
+			"file": "artworks/cupid.jpg",
+			"title": "Vintage cupid illustration",
+			"artist": "Original from British Library",
+			"date": "Unknown",
+			"tags": [
+				"Might make a good tattoo",
+				"Retro wood print",
+				"Simple things",
+				"Amore",
+				"Archer",
+				"Destiny"
+			]
+		},
+		{
+			"id": "astronaut",
+			"file": "artworks/moonLanding.jpg",
+			"title": "Astronaut Eugene A. Cernan, walks toward the Lunar Roving Vehicle",
+			"artist": "Original from NASA",
+			"date": "December 7–19",
+			"tags": [
+				"Space",
+				"Astronaut",
+				"Photography",
+				"Technology",
+				"history",
+				"America"
+			]
+		},
+		{
+			"id": "sunflowers",
+			"file": "artworks/sunflowers.jpg",
+			"title": "Sunflowers",
+			"artist": "Vincent van Gogh",
+			"date": "1888",
+			"tags": [
+				"Classic",
+				"Impressionism",
+				"Sunshine",
+				"Hella famous",
+				"Flowers",
+				"America"
+			]
+		},
+		{
+			"id": "TheMaroonBells",
+			"file": "artworks/maroonBells.jpg",
+			"title": "The Maroon Bells",
+			"artist": "Photography by Carol M. Highsmith",
+			"date": "Unknown",
+			"tags": [
+				"Mountains",
+				"Snowy",
+				"Wildlife",
+				"America"
+			]
+		},
+		{
+			"id": "alice",
+			"file": "artworks/alice.jpg",
+			"title": "Alice's adventures in Wonderland",
+			"artist": "Lewis Carroll",
+			"date": "2003",
+			"tags": [
+				"Weird Girl Aesthetic",
+				"So random xD",
+				"Girl getting attacked by animals",
+				"Literature classic",
+				"1900s"
+			]
+		},
+		{
+			"id": "",
 			"file": "artworks/vermeer_pearl_earring.jpg",
 			"title": "Girl with a Pearl Earring",
 			"artist": "Johannes Vermeer",
@@ -30,6 +147,242 @@
 				"Pearl",
 				"Everyone knows it",
 				"Matte Palette"
+			]
+		},
+		{
+			"id": "Torso",
+			"file": "artworks/torso.jpg",
+			"title": "Male nude sculpture, Marble torso",
+			"artist": "The MET Museum",
+			"date": "A.D. 118–161",
+			"tags": [
+				"Stature",
+				"Nudel Male Body",
+				"Museum",
+				"Genital of the statue broke off",
+				"Antique"
+			]
+		},
+		{
+			"id": "christmasVintage",
+			"file": "artworks/christmas.jpg",
+			"title": "Vintage Christmas 1894",
+			"artist": "Edward Penfield",
+			"date": "1894",
+			"tags": [
+				"Vintage Post Card",
+				"Christmas motive",
+				"Jolly man in yellow coat",
+				"Coming out of the forrest"
+			]
+		},
+		{
+			"id": "tattoo",
+			"file": "artworks/tatto.jpg",
+			"title": "Nude photography of tattooed Japanese man",
+			"artist": "Kusakabe Kimbei",
+			"date": "1870s –1890s",
+			"tags": [
+				"Vintage",
+				"Nudel Male Body",
+				"Japanese",
+				"Samurai motive",
+				"Man looking away"
+			]
+		},
+		{
+			"id": "seeJAck",
+			"file": "artworks/seeJAck.jpg",
+			"title": "See, Jack, he said, his manner wild and delirious",
+			"artist": "Wladyslaw Theodore Benda",
+			"date": "1922",
+			"tags": [
+				"Shocked Woman",
+				"Gentlemen playing cards",
+				"Intense Colours",
+				"Vintage",
+				"Poisoning",
+				"Drama"
+			]
+		},
+		{
+			"id": "clown",
+			"file": "artworks/clown.jpg",
+			"title": "Clown ornament, Seaside Heights, New Jersey",
+			"artist": "John Margolies",
+			"date": "1978",
+			"tags": [
+				"Clown mask",
+				"creepy ornament",
+				"Funny guy",
+				"Big makeup"
+			]
+		},
+		{
+			"id": "diver",
+			"file": "artworks/diver.jpg",
+			"title": "Workers during construction",
+			"artist": "Leslie Adkin",
+			"date": "1908",
+			"tags": [
+				"Group of diver",
+				"Retro workers",
+				"Vintage",
+				"Old school photo"
+			]
+		},
+		{
+			"id": "eagle",
+			"file": "artworks/eagle.jpg",
+			"title": "A very blue eagle",
+			"artist": "Dorothea Lange",
+			"date": "1936",
+			"tags": [
+				"Rural America",
+				"Dead eagle impaled on barbed wire",
+				"Morbid",
+				"Vintage",
+				"Photography",
+				"Wild"
+			]
+		},
+		{
+			"id": "theWave",
+			"file": "artworks/theWave.jpg",
+			"title": "The Wave",
+			"artist": "C.R.W. Nevinson",
+			"date": "1917",
+			"tags": [
+				"Wave",
+				"The sea is wild",
+				"simple Colours",
+				"Powerful",
+				"Force of Nature"
+			]
+		},
+		{
+			"id": "Sultana",
+			"file": "artworks/sultana.jpg",
+			"title": "Sultana",
+			"artist": "Henry Clive",
+			"date": "1925",
+			"tags": [
+				"Oil Painting",
+				"Oriental",
+				"Dove in Hand",
+				"Flowing garments",
+				"Beautiful woman",
+				"Long hair"
+			]
+		},
+		{
+			"id": "kingKong",
+			"file": "artworks/kingKong.jpg",
+			"title": "Danish movie poster for King Kong",
+			"artist": "RKO Radio Pictures",
+			"date": "1933",
+			"tags": [
+				"Powerful Colours",
+				"Violent monkey",
+				"Movie Poster",
+				"Strinking image",
+				"Damsel in distress",
+				"Agressive"
+			]
+		},
+		{
+			"id": "FrogJuggling",
+			"file": "artworks/frogJuggling.jpg",
+			"title": "Vintage Frog Illustration",
+			"artist": "Wheeler & Wilson & Co",
+			"date": "1870–1900",
+			"tags": [
+				"Funny animal",
+				"Vintage illustration",
+				"Frog juggling daggers and balls",
+				"Frog balancing on string",
+				"Frog in ballet costume"
+			]
+		},
+		{
+			"id": "lune",
+			"file": "artworks/lune.jpg",
+			"title": "Le voyage dans la lune",
+			"artist": "Georges Méliès",
+			"date": "1902",
+			"tags": [
+				"Vintage illustration",
+				"Screaming moon",
+				"Rocket impact",
+				"Moon getting hit by rocket",
+				"Spacefare",
+				"French"
+			]
+		},
+		{
+			"id": "playlist",
+			"file": "artworks/playlist.jpg",
+			"title": "Wild dreams",
+			"artist": "Modified Henri Rousseau",
+			"date": "Unknown ",
+			"tags": [
+				"Soft Lines",
+				"Desert night",
+				"Sleeping woman",
+				"Calm horse",
+				"Advertisement for a playlist"
+			]
+		},
+		{
+			"id": "Bikini Floating",
+			"file": "artworks/bra.jpg",
+			"title": "White bikini floating in clear turquoise water.",
+			"artist": "Rawpixel image library",
+			"date": "2025",
+			"tags": [
+				"Floating bikini",
+				"Summer day",
+				"Pool",
+				"Sunshine"
+			]
+		},
+		{
+			"id": "danae",
+			"file": "artworks/danae.jpg",
+			"title": "Danae",
+			"artist": "Gustav Klimt",
+			"date": "1907-1908",
+			"tags": [
+				"Red haired woman",
+				"Exposed Breast",
+				"Sleeping",
+				"Intimate",
+				"Famous painter"
+			]
+		},
+		{
+			"id": "bug",
+			"file": "artworks/bug.jpg",
+			"title": "Rüsselkäfer",
+			"artist": "Erik Karits",
+			"date": "2025",
+			"tags": [
+				"Photography",
+				"Nature",
+				"Weird bug",
+				"Macro Shot"
+			]
+		},
+		{
+			"id": "boatJungle",
+			"file": "artworks/boat.jpg",
+			"title": "Family Boat in the Jungle",
+			"artist": "ayingsalupan76",
+			"date": "2025",
+			"tags": [
+				"Nature Photo",
+				"Modern Family",
+				"Indigenous people",
 			]
 		},
 		{

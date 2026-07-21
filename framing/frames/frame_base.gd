@@ -8,6 +8,10 @@ extends Control
 ## Child Control marking the target rect for the feed container, in this
 ## frame's own local coordinate space. The node itself has no visuals.
 @export var feed_slot_path: NodePath = ^"FeedSlot"
+## Corner radius (feed-local pixels) of this frame's cutout, for frames whose
+## FeedSlot isn't a plain rectangle (e.g. a rounded phone screen). 0 = sharp
+## rectangle, no mask needed. See design-doc.md §2.
+@export var feed_corner_radius: float = 0.0
 
 var feed_slot: Control
 
