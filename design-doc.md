@@ -4,15 +4,15 @@ Godot software for an artistic vision of "scroll fatigue" — engagement with ea
 
 1. **Approaching**: a social-media-style feed of artworks inside the painting frame. A finger icon prompts the first swipe.
 2. **Distortion**: continued swiping subtly distorts each image; fatigue escalates the framing down the attention ladder (painting → tablet → phone). Stopping lets fatigue decay and the frames walk back up.
-3. **Focusing/Printing**: only after interacting, then holding still long enough for the framing to return all the way to the painting, does the dwelled image enter the focus frame — a visible progress bar fills while a nonsensical horoscope-style statement (AI API, you.com) is generated and printed on a thermal pocket printer via external scripts.
-4. **Reverting**: back to the initial state for the next visitor.
+3. **Focusing/Printing**: only after interacting, then holding still long enough for the framing to return all the way to the painting, does the dwelled image enter the focus frame — the progress bar fills, then a playful AI "assessment" of the viewer is generated via the you.com Express agent.
+4. **Reverting**: back to the initial state for the next visitor. *(Currently disabled by default — see §3a.)*
 
 ## Status
 
-- **Built:** full loop IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING → REVERTING → IDLE, all feed/framing/printing scenes, all autoloads.
-- **Mocked:** `external/horoscope_api.py`, `external/print_job.py` — match the §5 CLI contract; swap for the real you.com API and printer hardware with no Godot-side changes.
+- **Built:** full loop IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING, all feed/framing/printing scenes, all autoloads. Horoscope generation is **live** via the you.com Express agent (`external/horoscope_api.py`).
+- **Current PRINTING behavior:** bar fills → horoscope requested → printed to **console**. No thermal print, no auto-revert (opt back in via `PrintingOverlay.auto_revert`).
+- **Mocked/unused:** `external/print_job.py` (thermal printer, §5 contract unchanged).
 - **Not built:** `printing/result_card`, `text_distort`/`feed_distort` shaders.
-- **Open:** exhibit hardening, kiosk-hardware verification (paths, touch input).
 
 ## 0. Structural Conventions
 
@@ -21,6 +21,7 @@ Godot software for an artistic vision of "scroll fatigue" — engagement with ea
 - Content is data: artworks + metadata live behind `content/manifest.json`, accessed only via `ContentLibrary`.
 - Node references are `@export` variables assigned in the editor — no `$NodeName` fetching at runtime.
 - The feed renders once into a fixed-resolution `SubViewport`; every framing context is a different presentation of that one texture (§2).
+- Secrets (API keys) live in `external/secrets/` — gitignored, never in the repo or the .pck (§5).
 
 ## 1. Project Structure
 
@@ -50,18 +51,18 @@ res://
 │   ├── frame_base.gd       # feed_slot_path, get_feed_global_rect(), enter()/exit().
 │   └── frames/             # picture_frame (base), tablet_frame, phone_frame, focus_frame.
 ├── printing/
-│   ├── printing_overlay.*  # drives focus_frame's progress bar (0–50 horoscope, 50–100 print),
-│   │                       #   calls request_revert() when print_finished lands.
+│   ├── printing_overlay.*  # PRINTING driver: fills progress bar, then horoscope → console (§3a).
 │   ├── horoscope_client.gd # stateless ArtworkData → ExternalBridge.request_horoscope().
-│   └── result_card.*       # ⬜ optional on-screen preview of the printed text
+│   └── result_card.*       # ⬜ on-screen display of the generated text
 ├── shaders/
 │   ├── image_distort.gdshader  # "distortion" param; usable range ≈ 0.02 (subtle) – 0.15 (heavy)
 │   ├── text_distort.gdshader   # ⬜
 │   └── feed_distort.gdshader   # ⬜
 ├── content/                # dev copy; executable-adjacent content/ overrides at runtime (§4)
 └── external/               # shipped next to the exported executable, not in the .pck (§5)
-    ├── horoscope_api.py    # ⚠️ mocked
-    └── print_job.py        # ⚠️ mocked
+	├── secrets/            # gitignored; you_api_key (plain text, one line)
+	├── horoscope_api.py    # ✅ live you.com Express agent call
+	└── print_job.py        # ⚠️ mocked, currently unused
 ```
 
 ### Content manifest schema (`content/manifest.json`)
@@ -70,14 +71,14 @@ res://
 {
   "version": 1,
   "artworks": [
-    {
-      "id": "klimt_the_kiss",
-      "file": "artworks/klimt_the_kiss.jpg",
-      "title": "The Kiss",
-      "artist": "Gustav Klimt",
-      "date": "1907–1908",
-      "tags": ["gold", "romance", "ornament", "art nouveau", "embrace"]
-    }
+	{
+	  "id": "klimt_the_kiss",
+	  "file": "artworks/klimt_the_kiss.jpg",
+	  "title": "The Kiss",
+	  "artist": "Gustav Klimt",
+	  "date": "1907–1908",
+	  "tags": ["gold", "romance", "ornament", "art nouveau", "embrace"]
+	}
   ]
 }
 ```
@@ -123,7 +124,7 @@ signal first_interaction
 ## 3. Core State Machine (`state_machine.gd`)
 
 ```
-IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING → REVERTING → IDLE
+IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING (→ REVERTING → IDLE if auto_revert)
 ```
 
 - Single `state_changed(previous: int, current: int)` signal; states in `enum STATE`; current state in `var state: int`.
@@ -131,7 +132,7 @@ IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING → REVERTING → ID
   - `notify_first_interaction()` — IDLE → SCROLLING (main.gd, off `Feed.first_interaction`).
   - `request_focus()` / `cancel_focus()` — dwell_tracker.gd.
   - `request_printing()` — focus_frame.gd, after its fade-in completes.
-  - `request_revert()` — printing_overlay.gd, once both ExternalBridge signals land.
+  - `request_revert()` — printing_overlay.gd, only when `auto_revert` is on.
   - `request_idle()` — main.gd, after revert visuals finish.
 - On entering REVERTING the FSM calls `SessionData.reset()` + `ContentLibrary.reshuffle_order()` **before** emitting `state_changed`, so listeners rebuild from fresh state.
 
@@ -142,7 +143,7 @@ IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING → REVERTING → ID
   2. **Fatigue recovery** — dwell only accumulates once `SessionData.fatigue ≤ fatigue_focus_threshold` (0.2 = `escalation_thresholds[0] - de_escalation_hysteresis`). A pause mid-ladder first plays out the full de-escalation back to the painting; only then does the `dwell_threshold` (4.0s) focus timer run. Focus is therefore always entered *from* the painting frame, never from tablet/phone.
 - Below `velocity_still_threshold` dwell accumulates; motion resets it only after `forgiveness_window` (0.3s). On trigger: locks the feed, writes `SessionData.current_artwork`, calls `request_focus()`. A new `nearest_card_changed` while focused cancels back. Resets itself on REVERTING.
 - `focus_frame.gd` owns FOCUSING → PRINTING: `enter()` fades in (progress bar at 0), then `request_printing()`.
-- `printing_overlay.gd` owns PRINTING → REVERTING and drives focus_frame's progress bar (0–50% horoscope, 50–100% print) with a creep tween that snaps when the real signal lands.
+- `printing_overlay.gd` owns PRINTING: fills the progress bar to 100% over `bar_fill_duration_sec` (3.0s), **then** requests the horoscope, prints the result (or fallback) to console and caches it in `SessionData.last_horoscope_text`. The exhibit stays here; setting `auto_revert = true` restores PRINTING → REVERTING after `revert_delay_sec`.
 - `main.gd` owns framing + the IDLE/REVERTING bookends. Per state: IDLE → level 0; DISTORTING → re-apply current level (covers cancel-back from FOCUSING); FOCUSING → focus frame; REVERTING → `Feed.reset()` + level 0, then `request_idle()` after `revert_settle_time`. Framing changes are deduped — re-entering a state doesn't re-crossfade the frame already on screen.
 
 ## 3b. Frame Escalation Ladder (`main.gd`)
@@ -160,14 +161,21 @@ IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING → REVERTING → ID
 
 Only place that spawns processes; Godot never blocks on network/serial I/O.
 
-- `horoscope_api.py`: `--title --artist --date --tags` (comma-joined) → stdout JSON `{"text": "..."}`.
-- `print_job.py`: `--text [--image <path>]`, exit `0` on success.
-- Each request runs `OS.execute()` on a dedicated `Thread`, polled via mutex-guarded dict every 0.05s. Timeouts: 12s horoscope / 20s print. On failure/timeout: horoscope → `horoscope_ready(fallback_line, was_fallback=true)`; print → `print_finished(false)`. PRINTING never dead-ends.
+- `horoscope_api.py`: `--title --artist --date --tags` (comma-joined) → stdout JSON `{"text": "..."}`, exit 0. **Live**: POSTs to the you.com Express agent, `https://api.you.com/v1/agents/runs`, body `{"agent": "express", "input": <prompt>, "stream": false}`. Stdlib-only (`urllib`), so the kiosk needs no venv or pip packages.
+  - `stream` is **required** — omitting it is a 422. `tools` is omitted deliberately: no web grounding means no search round-trip, so the answer is LLM-only and as fast as the agent gets.
+  - The answer is the `output` item with `type == "message.answer"`; other items (e.g. `web_search.results`) carry no `text`.
+  - Auth headers: agents document `Authorization: Bearer <key>`, search/billing document `X-API-Key: <key>`. The script sends both.
+  - An explicit `User-Agent` is **mandatory**: `api.you.com` is behind Cloudflare, whose browser integrity check 403s urllib's default `Python-urllib/x.y` UA with body `error code: 1010`.
+  - On success stdout carries **only** the JSON line. All failures exit 1 and explain themselves on stderr (`--debug` also dumps the raw response); `python3 external/horoscope_api.py --title … --debug` is the diagnostic path.
+- **API key**: read from `$YOU_API_KEY`, else `external/secrets/you_api_key` (one line, gitignored). Keys come from the you.com API platform (you.com/platform), not the consumer login/subscription. Verify one with `curl https://api.you.com/v1/billing/account_balance -H "X-API-Key: <key>"` (balance is in cents).
+- `print_job.py`: `--text [--image <path>]`, exit `0` on success. Contract unchanged; currently not invoked (§3a).
+- `external_bridge.gd` scans the merged stdout+stderr blob for the last line that parses as a JSON object, so stray warnings never break a good response.
+- Each request runs `OS.execute()` on a dedicated `Thread`, polled via mutex-guarded dict every 0.05s. Timeouts: 12s horoscope / 20s print (the script's own HTTP timeout is 9s). On failure/timeout: horoscope → `horoscope_ready(fallback_line, was_fallback=true)`; print → `print_finished(false)`. PRINTING never dead-ends on a network failure.
 - One request of each kind in flight at a time; `.py` runs via `python3` (dev), anything else (PyInstaller build, the export target) runs directly. Path resolution mirrors `content_library.gd` (executable-adjacent `external/`, else `res://external`).
 
 ## 6. Remaining Work
 
-- Real you.com API + thermal-printer calls in `external/` (drop-in per §5 contract).
-- `result_card` on-screen preview; `text_distort`/`feed_distort` shaders.
-- Distortion reading as "fatigue" not "glitch" — tune `distortion_exponent`/`max_shader_distortion` + shader look on real hardware.
-- Kiosk verification: executable-adjacent paths, touch input through the shrunk container.
+- `result_card` on-screen display of the generated text (replaces console output).
+- Re-enable the revert loop for exhibit mode (`PrintingOverlay.auto_revert`) + thermal-printer `print_job.py`.
+- `text_distort`/`feed_distort` shaders; distortion tuning on real hardware.
+- Kiosk verification: executable-adjacent paths, `secrets/` deployment, touch input through the shrunk container.

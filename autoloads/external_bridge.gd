@@ -124,6 +124,17 @@ func _run_horoscope_script(args: PackedStringArray, result: Dictionary, mutex: M
 	mutex.unlock()
 
 
+## OS.execute merges stderr into one blob; take the last line that is a
+## JSON object so warnings ahead of it don't poison the parse.
+func _last_json_line(blob: String) -> String:
+	var lines := blob.split("\n", false)
+	for i in range(lines.size() - 1, -1, -1):
+		var line := lines[i].strip_edges()
+		if line.begins_with("{") and line.ends_with("}"):
+			return line
+	return blob
+
+
 func _run_print_script(args: PackedStringArray, result: Dictionary, mutex: Mutex) -> void:
 	var script_path := _external_dir.path_join("print_job.py")
 	var output: Array = []

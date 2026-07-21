@@ -37,3 +37,5 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="PrintingOverlay" parent="." unique_id=1340568883 instance=ExtResource("3_h2yge")]
+auto_revert = true
+revert_delay_sec = 8.0
