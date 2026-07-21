@@ -27,7 +27,6 @@ mouse_filter = 2
 [node name="DwellTracker" type="Node" parent="." unique_id=2083194794 node_paths=PackedStringArray("feed")]
 script = ExtResource("5_2ywpr")
 feed = NodePath("../FeedClip/FeedContainer/SubViewport/Feed")
-dwell_threshold = 2.0
 
 [node name="FeedClip" type="Control" parent="." unique_id=92002804]
 clip_contents = true

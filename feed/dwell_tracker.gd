@@ -2,16 +2,26 @@ class_name DwellTracker
 extends Node
 ## Watches Feed.nearest_card_changed + SessionData.scroll_velocity and turns
 ## sustained stillness on one card into StateMachine.request_focus().
-## Only accumulates dwell while the FSM is in SCROLLING or DISTORTING — the
-## states in which request_focus() can actually take. Without this gate, an
-## unattended IDLE screen would lock the feed after dwell_threshold seconds
-## while the focus request silently no-ops.
+##
+## Two gates keep focus meaningful:
+## 1. FSM state — dwell only accumulates in SCROLLING/DISTORTING, the states in
+##    which request_focus() can actually take.
+## 2. Fatigue recovery — dwell only accumulates once SessionData.fatigue has
+##    decayed below fatigue_focus_threshold. This forces the escalation ladder
+##    to walk all the way back down (phone -> tablet -> painting) BEFORE the
+##    focus timer even starts: attention must visibly recover first, and a brief
+##    pause mid-ladder can never skip straight to FOCUSING/printing.
+##
 ## Assign `feed` in the editor rather than fetching it via $NodeName at runtime.
 
 @export var feed: Control
-@export var dwell_threshold: float = 1.2 # seconds of stillness required to focus
+@export var dwell_threshold: float = 4.0 # seconds of recovered stillness required to focus
 @export var forgiveness_window: float = 0.3 # brief motion tolerated before resetting dwell timer
 @export var velocity_still_threshold: float = 40.0 # px/s below which the feed counts as "still"
+## Dwell only accumulates while SessionData.fatigue is at/below this. Set it to
+## main.gd's escalation_thresholds[0] - de_escalation_hysteresis (0.35 - 0.15)
+## so "focus is possible" coincides exactly with "the base frame is back".
+@export var fatigue_focus_threshold: float = 0.2
 
 var _current_card: Control = null
 var _current_artwork: Dictionary = { }
@@ -37,6 +47,11 @@ func _process(delta: float) -> void:
 
 	if SessionData.scroll_velocity <= velocity_still_threshold:
 		_motion_elapsed = 0.0
+		if SessionData.fatigue > fatigue_focus_threshold:
+			# Still de-escalating: stay still, let fatigue decay and the frames
+			# step back down; the focus timer starts only once recovered.
+			_dwell_elapsed = 0.0
+			return
 		_dwell_elapsed += delta
 		if _dwell_elapsed >= dwell_threshold:
 			_trigger_focus()

@@ -1,10 +1,10 @@
 # Scroll Fatigue — Design Doc
 
-Godot software for an artistic vision of "scroll fatigue" — engagement with each post drops as the user scrolls past more of them.
+Godot software for an artistic vision of "scroll fatigue" — engagement with each post drops as the user scrolls past more of them. **Frames symbolize how much attention each post receives**: painting frame = full attention (base), tablet = less, phone = least.
 
-1. **Approaching**: a social-media-style feed of artworks inside a phone frame. A finger icon prompts the first swipe.
-2. **Distortion**: continued swiping subtly distorts each image; at the feed level, fatigue escalates the framing (phone → picture frame → …) to de-emphasize individual images. Staying on one image reverts the effect until only that image is in focus.
-3. **Printing**: the image the visitor settles on gets a nonsensical horoscope-style statement (AI API, you.com) printed on a thermal pocket printer via external scripts, behind a visible progress bar.
+1. **Approaching**: a social-media-style feed of artworks inside the painting frame. A finger icon prompts the first swipe.
+2. **Distortion**: continued swiping subtly distorts each image; fatigue escalates the framing down the attention ladder (painting → tablet → phone). Stopping lets fatigue decay and the frames walk back up.
+3. **Focusing/Printing**: only after interacting, then holding still long enough for the framing to return all the way to the painting, does the dwelled image enter the focus frame — a visible progress bar fills while a nonsensical horoscope-style statement (AI API, you.com) is generated and printed on a thermal pocket printer via external scripts.
 4. **Reverting**: back to the initial state for the next visitor.
 
 ## Status
@@ -41,14 +41,14 @@ res://
 │   │                       #   fatigue→shader mapping, nearest-card signal, snap-to-top.
 │   ├── post_card.tscn/.gd  # setup(artist,title,texture), set_distortion() via duplicated
 │   │                       #   per-instance ShaderMaterial on ArtworkRect.
-│   ├── dwell_tracker.gd    # dwell → request_focus(); node in frame_host.tscn (§3a).
+│   ├── dwell_tracker.gd    # gated dwell → request_focus(); node in frame_host.tscn (§3a).
 │   └── prompt_finger.*     # looping swipe tween; dismiss()/reset().
 ├── framing/
 │   ├── frame_host.tscn/.gd # FeedClip (clip) > SubViewportContainer > SubViewport > Feed +
 │   │                       #   DecorationLayer + DwellTracker. Tweens clip to FeedSlot rects,
-│   │                       #   cover-fit top-anchored (§2). Exposes @export feed.
+│   │                       #   cover-fit top-anchored, dip-free crossfades (§2). @export feed.
 │   ├── frame_base.gd       # feed_slot_path, get_feed_global_rect(), enter()/exit().
-│   └── frames/             # phone_frame, picture_frame, focus_frame (§3a).
+│   └── frames/             # picture_frame (base), tablet_frame, phone_frame, focus_frame.
 ├── printing/
 │   ├── printing_overlay.*  # drives focus_frame's progress bar (0–50 horoscope, 50–100 print),
 │   │                       #   calls request_revert() when print_finished lands.
@@ -101,9 +101,11 @@ var scroll_velocity: float  # Feed writes every frame; dwell_tracker's stillness
 
 ## 2. Framing: container-based, not camera-based
 
-The feed renders into a fixed `SubViewport` (`size_2d_override` = 1080×1920); `frame_host.gd` tweens **FeedClip** to the active frame's FeedSlot rect and cover-fits the container inside — aspect-preserving, top-anchored, cropping bottom/sides rather than stretching (the snapped card sits at the top). Frames are `FrameBase` decoration scenes crossfaded around that container.
+The feed renders into a fixed `SubViewport` (`size_2d_override` = 1080×1920); `frame_host.gd` tweens **FeedClip** to the active frame's FeedSlot rect and cover-fits the container inside — aspect-preserving, top-anchored, cropping bottom/sides rather than stretching (the snapped card sits at the top). Frames are `FrameBase` decoration scenes swapped in `DecorationLayer`.
 
-Gotchas already handled in `frame_host.gd`: `size_2d_override` set at runtime; `get_feed_global_rect()` honors editor `scale` on FeedSlots; `show_frame()` re-checks `current_frame` after its one-frame layout await; decoration nodes are `mouse_filter = IGNORE` so the shrunk feed stays the touch target; a manual `push_input()` fallback exists behind `use_manual_input_forwarding` (off by default).
+- **Dip-free crossfade:** `show_frame()` keeps the outgoing frame fully opaque underneath while the incoming one (a later sibling, drawn on top) fades in; only then does the old one fade out (`duration * 0.5`) and free. Both frames are never half-transparent at once, so the feed never flashes "bare" between escalation steps. Rapid supersessions chain cleanly: each call retires exactly the frame it replaced.
+- **Draw order:** FeedClip is a later sibling than DecorationLayer, so the feed draws above all z-index-0 decoration. Any decoration meant to render **over** the feed (phone bezel, focus frame's progress bar) needs `z_index ≥ 1` on that node.
+- Gotchas already handled in `frame_host.gd`: `size_2d_override` set at runtime; `get_feed_global_rect()` honors editor `scale` on FeedSlots; `show_frame()` re-checks `current_frame` after its one-frame layout await; decoration nodes are `mouse_filter = IGNORE`; a manual `push_input()` fallback exists behind `use_manual_input_forwarding` (off by default).
 
 ## 2a. Feed's Public API
 
@@ -115,8 +117,8 @@ signal first_interaction
 ```
 
 - **"Nearest" card = top edge closest to the top of the feed.**
-- **Snap-to-top:** after `snap_delay` (1.0s) of near-stillness, Feed tweens the nearest card fully into view. Keep `dwell_threshold` ≥ ~2.0s so the snap completes before FOCUSING fires.
-- **Fatigue → shader mapping** (`_apply_distortion`): `pow(fatigue + jitter, distortion_exponent) * max_shader_distortion` (defaults 1.6 / 0.12). `SessionData.fatigue` stays raw 0..1; only the shader input is compressed into the shader's usable range. Tune ramp feel via these two exports, not the fatigue accumulation itself.
+- **Snap-to-top:** after `snap_delay` (1.0s) of near-stillness, Feed tweens the nearest card fully into view.
+- **Fatigue → shader mapping** (`_apply_distortion`): `pow(fatigue + jitter, distortion_exponent) * max_shader_distortion` (defaults 1.6 / 0.12). `SessionData.fatigue` stays raw 0..1; only the shader input is compressed into the shader's usable range.
 
 ## 3. Core State Machine (`state_machine.gd`)
 
@@ -135,16 +137,19 @@ IDLE → SCROLLING → DISTORTING → FOCUSING → PRINTING → REVERTING → ID
 
 ## 3a. Dwell + edge ownership
 
-- `dwell_tracker.gd` (node in frame_host.tscn, `@export var feed`): accumulates dwell **only while the FSM is in SCROLLING or DISTORTING** (in other states `request_focus()` couldn't take and the tracker would lock the feed for nothing). Below `velocity_still_threshold` dwell accumulates; motion resets it only after `forgiveness_window` (0.3s). On trigger: locks the feed, writes `SessionData.current_artwork`, calls `request_focus()`. A new `nearest_card_changed` while focused cancels back. Resets itself on REVERTING.
-- `focus_frame.gd` owns FOCUSING → PRINTING: `enter()` fades in, then `request_printing()`.
+- `dwell_tracker.gd` (node in frame_host.tscn, `@export var feed`) gates dwell twice:
+  1. **FSM state** — only SCROLLING/DISTORTING accumulate (elsewhere `request_focus()` couldn't take).
+  2. **Fatigue recovery** — dwell only accumulates once `SessionData.fatigue ≤ fatigue_focus_threshold` (0.2 = `escalation_thresholds[0] - de_escalation_hysteresis`). A pause mid-ladder first plays out the full de-escalation back to the painting; only then does the `dwell_threshold` (4.0s) focus timer run. Focus is therefore always entered *from* the painting frame, never from tablet/phone.
+- Below `velocity_still_threshold` dwell accumulates; motion resets it only after `forgiveness_window` (0.3s). On trigger: locks the feed, writes `SessionData.current_artwork`, calls `request_focus()`. A new `nearest_card_changed` while focused cancels back. Resets itself on REVERTING.
+- `focus_frame.gd` owns FOCUSING → PRINTING: `enter()` fades in (progress bar at 0), then `request_printing()`.
 - `printing_overlay.gd` owns PRINTING → REVERTING and drives focus_frame's progress bar (0–50% horoscope, 50–100% print) with a creep tween that snaps when the real signal lands.
 - `main.gd` owns framing + the IDLE/REVERTING bookends. Per state: IDLE → level 0; DISTORTING → re-apply current level (covers cancel-back from FOCUSING); FOCUSING → focus frame; REVERTING → `Feed.reset()` + level 0, then `request_idle()` after `revert_settle_time`. Framing changes are deduped — re-entering a state doesn't re-crossfade the frame already on screen.
 
 ## 3b. Frame Escalation Ladder (`main.gd`)
 
-- **Level 0 = `base_frame_scene`** (the phone frame — the exhibit opens and reverts into it; empty = bare fullscreen). Level *i* = `escalation_frames[i-1]`, mildest → strongest, with matching ascending `escalation_thresholds`. Adding a frame = append scene + threshold in the editor.
+- **Level 0 = `base_frame_scene` = picture_frame** — full attention; the exhibit opens, de-escalates, and reverts into it. Level *i* = `escalation_frames[i-1]`, ordered by *decreasing* attention: `[tablet_frame, phone_frame]` with thresholds `[0.35, 0.7]`.
 - `focus_frame` is entered via the FOCUSING state, **never** listed in `escalation_frames` — it has its own `focus_frame_scene` export.
-- Escalation is sluggish by design: `min_frame_hold` (2.5s) before any level change; de-escalation requires fatigue to drop `de_escalation_hysteresis` (0.15) below the threshold.
+- Escalation is sluggish by design: `min_frame_hold` (2.5s) before any level change; de-escalation requires fatigue to drop `de_escalation_hysteresis` (0.15) below the threshold. With fatigue decaying at 0.12/s, a full phone → painting recovery plus the 4s focus dwell takes roughly 8–10s of stillness.
 
 ## 4. Content Loading
 

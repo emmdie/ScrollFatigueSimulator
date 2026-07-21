@@ -1,15 +1,15 @@
 class_name FrameHost
 extends Control
 ## Owns the feed SubViewport + the SubViewportContainer that displays it, and
-## swaps FrameBase decoration scenes (phone_frame, picture_frame, focus_frame)
-## around that container. Feed itself never resizes - only this container does.
-## See design-doc.md §2 / §7 step 4 (framing spike).
+## swaps FrameBase decoration scenes (phone/tablet/picture/focus frames) around
+## that container. Feed itself never resizes - only this container does.
+## See design-doc.md §2.
 
 @export var transition_duration := 0.6
 ## Spike flag. SubViewportContainer is expected to forward scaled/offset input
 ## on its own (stretch = true handles the coordinate remap internally). Flip
-## this on only if manual testing (see class comment below) shows drag/touch
-## events failing to reach Feed once the container is shrunk/offset.
+## this on only if manual testing shows drag/touch events failing to reach Feed
+## once the container is shrunk/offset.
 @export var use_manual_input_forwarding := false
 ## Fixed internal render resolution of the feed (size_2d_override); the clip/cover
 ## math below preserves this aspect ratio regardless of FeedSlot shape.
@@ -47,34 +47,52 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-## Target = full FrameHost rect, no decoration. Used for the bare-feed framing
-## (IDLE / SCROLLING / early DISTORTING).
+## Target = full FrameHost rect, no decoration. Only used when main.gd has no
+## base_frame_scene set; the old frame fades out with nothing replacing it.
 func to_bare_fullscreen(duration := transition_duration) -> void:
-	_clear_current_frame(duration)
+	var old := current_frame
+	current_frame = null
+	_retire_frame(old, 0.0, duration)
 	_tween_clip_to(get_global_rect(), duration)
 
 
-## Swap in a new FrameBase scene (any frames/*.tscn).
+## Swap in a new FrameBase scene (any frames/*.tscn). The old frame stays fully
+## opaque UNDERNEATH while the new one (a later DecorationLayer sibling, so it
+## draws on top) fades in, and only then fades out — the crossfade never dips
+## into a "no frame" moment with both decorations half-transparent.
 func show_frame(frame_scene: PackedScene, duration := transition_duration) -> void:
-	_clear_current_frame(duration)
+	var old := current_frame
+	current_frame = null
 	var frame: FrameBase = frame_scene.instantiate()
 	decoration_layer.add_child(frame)
 	current_frame = frame
+	_retire_frame(old, duration, duration * 0.5)
 	# Let layout settle for one frame so FeedSlot's global rect is valid before reading it.
 	await get_tree().process_frame
 	if current_frame != frame:
-		return # superseded by another framing change during the await
+		return # superseded during the await; the superseding call retires this frame
 	frame.enter(duration)
 	_tween_clip_to(frame.get_feed_global_rect(), duration)
 
 
-func _clear_current_frame(duration: float) -> void:
-	if current_frame == null:
+## Fades `old` out after `delay` seconds and frees it. Each show_frame call
+## retires exactly the frame it replaced, so rapid supersessions chain cleanly
+## (a superseded, never-entered frame just fades from alpha 0 and is freed).
+func _retire_frame(old: FrameBase, delay: float, fade_duration: float) -> void:
+	if old == null:
 		return
-	var old := current_frame
-	current_frame = null
-	var tw := old.exit(duration)
-	tw.finished.connect(old.queue_free)
+	var tw := create_tween()
+	if delay > 0.0:
+		tw.tween_interval(delay)
+	else:
+		tw.tween_interval(0.0001) # tween needs at least one step before the callback
+	tw.tween_callback(
+		func() -> void:
+			if not is_instance_valid(old):
+				return
+			var exit_tw := old.exit(fade_duration)
+			exit_tw.finished.connect(old.queue_free)
+	)
 
 
 func _tween_clip_to(target_global_rect: Rect2, duration: float) -> void:
