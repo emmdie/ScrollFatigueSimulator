@@ -1,21 +1,14 @@
 class_name Feed
 # scroll container of post_card instances (fixed portrait resolution, e.g. 1080x1920)
 #
-# Assumed autoload APIs (adjust names below if your real autoloads differ):
-#   ContentLibrary.get_artwork_count() -> int
-#   ContentLibrary.get_artwork(order_index: int) -> Dictionary  # {id, title, artist, tags, ...}
-#   ContentLibrary.load_texture(artwork_data: Dictionary) -> Texture2D
-#   ContentLibrary.get_shuffled_order() -> Array[int]           # optional, used by reset()
-#   SessionData.fatigue: float                                  # written here, read elsewhere
-#
-# Per design doc §2: "No special 'zoomed' feed state exists inside the feed
-# itself; the feed only knows scrolling locked yes/no." Feed never talks to
-# StateMachine directly — frame_host/dwell_tracker call set_scroll_locked().
+# Per design doc §2: the feed only knows scrolling locked yes/no. Feed never
+# talks to StateMachine directly — frame_host/dwell_tracker call
+# set_scroll_locked(). Feed publishes SessionData.fatigue and
+# SessionData.scroll_velocity every frame.
 extends Control
 
-## Emitted whenever a different post becomes the one nearest the center of the
-## viewport. dwell_tracker.gd (a sibling child in feed.tscn) listens to this
-## to run its per-post dwell timer.
+## Emitted whenever a different post becomes the one nearest the top of the
+## viewport. dwell_tracker.gd listens to this to run its per-post dwell timer.
 signal nearest_card_changed(post_card: Control, artwork_data: Dictionary)
 ## Emitted once, the first time the user provides scroll input.
 signal first_interaction
@@ -37,6 +30,12 @@ signal first_interaction
 @export var fatigue_decay_rate: float = 0.12 # fatigue lost per second while idle
 @export var max_fatigue: float = 1.0
 @export var per_card_jitter: float = 0.12 # randomizes distortion slightly per card so it isn't uniform
+@export_group("Distortion Mapping")
+## The shader's usable "distortion" range is small (~0.02 reads as subtle,
+## ~0.15 as heavy). Fatigue (0..1) is eased through an exponent, then scaled
+## into that range — tune these two instead of the fatigue curve itself.
+@export var distortion_exponent: float = 1.6 # >1 = slow start, late ramp
+@export var max_shader_distortion: float = 0.12 # shader value at full fatigue
 @export_group("Snap")
 ## Seconds of near-stillness before the top card tweens fully into view.
 @export var snap_delay: float = 1.0
@@ -100,8 +99,8 @@ func _gui_input(event: InputEvent) -> void:
 		_apply_drag_delta(event.relative.y)
 
 
-## Called by frame_host/dwell_tracker — the only thing outside Feed is allowed
-## to tell it about. Locks out drag input and momentum during FOCUSING/PRINTING.
+## Called by dwell_tracker (dwell) — the only thing outside Feed is allowed to
+## tell it about. Locks out drag input and momentum during FOCUSING/PRINTING.
 func set_scroll_locked(locked: bool) -> void:
 	scrolling_locked = locked
 	if locked:
@@ -110,8 +109,9 @@ func set_scroll_locked(locked: bool) -> void:
 		_velocity = 0.0
 
 
-## Called on REVERTING: clears scroll/fatigue state and re-shuffles content.
+## Called on REVERTING: clears scroll/fatigue/lock state and re-shuffles content.
 func reset() -> void:
+	scrolling_locked = false
 	_scroll_offset = 0.0
 	_velocity = 0.0
 	_fatigue = 0.0
@@ -229,9 +229,13 @@ func _update_fatigue(delta: float) -> void:
 	SessionData.fatigue = _fatigue
 
 
+## Maps fatigue (0..1, plus per-card jitter) into the shader's actual usable
+## range: eased by distortion_exponent, scaled by max_shader_distortion.
+## SessionData.fatigue stays the raw 0..1 value — only the shader input shrinks.
 func _apply_distortion() -> void:
 	for slot in _slots:
-		var value: float = clampf(_fatigue + slot.jitter, 0.0, 1.0)
+		var base: float = clampf(_fatigue + slot.jitter, 0.0, 1.0)
+		var value: float = pow(base, distortion_exponent) * max_shader_distortion
 		if slot.node.has_method("set_distortion"):
 			slot.node.set_distortion(value)
 

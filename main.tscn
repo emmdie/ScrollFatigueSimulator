@@ -6,23 +6,7 @@
 [ext_resource type="PackedScene" uid="uid://dppb78mxag6ql" path="res://framing/frames/focus_frame.tscn" id="3_7mycd"]
 [ext_resource type="PackedScene" uid="uid://cvk44sgdirro7" path="res://framing/frames/picture_frame.tscn" id="3_272bh"]
 [ext_resource type="PackedScene" uid="uid://cg2wpdxj1isew" path="res://printing/printing_overlay.tscn" id="3_h2yge"]
-[ext_resource type="Shader" uid="uid://c0pb3obiiwvr6" path="res://shaders/balatro.gdshader" id="5_272bh"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_7mycd"]
-shader = ExtResource("5_272bh")
-shader_parameter/polar_coordinates = false
-shader_parameter/polar_center = Vector2(0.5, 0.5)
-shader_parameter/polar_zoom = 1.0
-shader_parameter/polar_repeat = 1.0
-shader_parameter/spin_rotation = 0.0
-shader_parameter/spin_speed = 1.0
-shader_parameter/offset = Vector2(0, 0)
-shader_parameter/colour_1 = Color(0.98039216, 0.9843137, 0.9647059, 1)
-shader_parameter/colour_2 = Color(0.7764706, 0.7176471, 0.74509805, 1)
-shader_parameter/colour_3 = Color(0.3372549, 0.3529412, 0.45882353, 1)
-shader_parameter/contrast = 2.0
-shader_parameter/spin_amount = 0.36
-shader_parameter/pixel_filter = 2000.0
+[ext_resource type="PackedScene" uid="uid://bwmehnamsw5fg" path="res://framing/frames/tablet_frame.tscn" id="4_5vw27"]
 
 [node name="Main" type="Control" unique_id=1591667798 node_paths=PackedStringArray("frame_host")]
 layout_mode = 3
@@ -33,17 +17,10 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_0xm2m")
 frame_host = NodePath("FrameHost")
-escalation_frames = Array[PackedScene]([ExtResource("3_272bh"), ExtResource("2_lquwl")])
+base_frame_scene = ExtResource("3_272bh")
+escalation_frames = Array[PackedScene]([ExtResource("4_5vw27"), ExtResource("2_lquwl")])
+escalation_thresholds = Array[float]([0.18, 0.4])
 focus_frame_scene = ExtResource("3_7mycd")
-
-[node name="ColorRect" type="ColorRect" parent="." unique_id=2097490940]
-material = SubResource("ShaderMaterial_7mycd")
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
 
 [node name="FrameHost" parent="." unique_id=135994993 instance=ExtResource("2_h2yge")]
 layout_mode = 1

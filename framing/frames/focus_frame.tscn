@@ -12,6 +12,19 @@ grow_vertical = 2
 script = ExtResource("1_q1ebs")
 progress_bar = NodePath("ProgressBar")
 
+[node name="ProgressBar" type="ProgressBar" parent="." unique_id=592096169]
+custom_minimum_size = Vector2(600, 50)
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_top = -25.0
+offset_right = 600.0
+offset_bottom = 25.0
+grow_vertical = 2
+value = 40.0
+show_percentage = false
+
 [node name="FeedSlot" type="Control" parent="." unique_id=123524262]
 layout_mode = 1
 anchors_preset = 15
@@ -19,8 +32,3 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-
-[node name="ProgressBar" type="ProgressBar" parent="." unique_id=592096169]
-layout_mode = 0
-offset_right = 4.0
-offset_bottom = 27.0

@@ -1,0 +1,38 @@
+[gd_scene format=3 uid="uid://bwmehnamsw5fg"]
+
+[ext_resource type="Script" uid="uid://ico81g5jcmln" path="res://framing/frames/tablet_frame.gd" id="1_0vdkq"]
+[ext_resource type="Texture2D" uid="uid://d2fm37skp5k47" path="res://content/Frames/iPad.png" id="1_weq64"]
+
+[node name="TabletFrame" type="Control" unique_id=238760823]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_0vdkq")
+feed_slot_path = NodePath("TextureRect/FeedSlot")
+
+[node name="TextureRect" type="TextureRect" parent="." unique_id=59191418]
+layout_mode = 1
+anchors_preset = 13
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("1_weq64")
+expand_mode = 3
+stretch_mode = 4
+
+[node name="FeedSlot" type="Control" parent="TextureRect" unique_id=1417457747]
+show_behind_parent = true
+clip_children = 2
+custom_minimum_size = Vector2(1700, 2200)
+anchors_preset = 0
+offset_left = 25.467651
+offset_top = 105.0
+offset_right = 1725.4677
+offset_bottom = 2025.0
+scale = Vector2(0.38, 0.38)
+mouse_filter = 2

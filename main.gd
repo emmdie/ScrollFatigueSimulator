@@ -1,19 +1,22 @@
 extends Control
 ## Top-level conductor. Translates StateMachine states into FrameHost framing,
 ## injects Feed.first_interaction into the FSM, and owns scene-level cleanup on
-## REVERTING. All per-edge logic (dwell -> FOCUSING, focus -> PRINTING, print ->
-## REVERTING) is owned by its own node; main.gd only orchestrates framing and the
+## REVERTING. Per-edge logic (dwell -> FOCUSING, focus -> PRINTING, print ->
+## REVERTING) lives in its own node; main.gd only orchestrates framing and the
 ## IDLE / REVERTING bookends.
 
 @export var frame_host: FrameHost
 @export_group("Frames")
-## Ordered mildest -> strongest. During DISTORTING, fatigue walks up this list;
-## level 0 is bare fullscreen, level i is escalation_frames[i-1]. focus_frame is
-## conceptually the final frame but stays separate — it's entered via the
-## FOCUSING state, not fatigue. Add new frames by appending scene + threshold.
+## Framing at escalation level 0: IDLE, SCROLLING, low-fatigue DISTORTING, and
+## after REVERTING. Set to phone_frame.tscn so the exhibit opens inside the
+## phone. Leave empty for bare fullscreen.
+@export var base_frame_scene: PackedScene
+## Ordered mildest -> strongest, entered as fatigue climbs. Level 0 is
+## base_frame_scene; level i is escalation_frames[i-1]. focus_frame is entered
+## via the FOCUSING state, never by fatigue — do NOT add it here.
 @export var escalation_frames: Array[PackedScene] = []
 ## Fatigue at which escalation_frames[i] appears. Same length, ascending.
-@export var escalation_thresholds: Array[float] = [0.35, 0.70]
+@export var escalation_thresholds: Array[float] = [0.35]
 @export var focus_frame_scene: PackedScene
 @export_group("Escalation feel")
 ## Fatigue must fall this far BELOW a level's threshold before stepping back
@@ -24,8 +27,9 @@ extends Control
 @export_group("Revert")
 @export var revert_settle_time: float = 0.6
 
-var _level: int = 0 # 0 = bare, i = escalation_frames[i-1]
+var _level: int = 0 # 0 = base frame, i = escalation_frames[i-1]
 var _level_age: float = 0.0
+var _shown_scene: PackedScene = null # skip re-showing the frame already on screen
 
 # Feed lives inside frame_host's SubViewport; frame_host exposes it as @export var feed.
 @onready var _feed: Control = frame_host.feed
@@ -37,7 +41,7 @@ func _ready() -> void:
 		push_warning("main.gd: escalation_frames and escalation_thresholds lengths differ; extra entries ignored")
 	StateMachine.state_changed.connect(_on_state_changed)
 	_feed.first_interaction.connect(StateMachine.notify_first_interaction)
-	frame_host.to_bare_fullscreen()
+	_set_level(0)
 
 
 func _process(delta: float) -> void:
@@ -50,15 +54,15 @@ func _on_state_changed(_previous: int, current: int) -> void:
 		StateMachine.STATE.IDLE:
 			_set_level(0)
 		StateMachine.STATE.DISTORTING:
-			# Re-apply the current level's framing: covers both first entry
-			# (level 0 -> no-op) and cancel-back from FOCUSING, where the
-			# focus frame must yield to whatever escalation level we were at.
+			# Re-apply the current level's framing: covers cancel-back from
+			# FOCUSING, where the focus frame must yield to the escalation
+			# level we were at. No-op if that frame is already showing.
 			_set_level(_level)
 		StateMachine.STATE.FOCUSING:
-			frame_host.show_frame(focus_frame_scene)
+			_apply_framing(focus_frame_scene)
 		StateMachine.STATE.REVERTING:
 			_revert()
-		# SCROLLING: bare framing carries over; prompt finger self-dismisses in feed.gd
+		# SCROLLING: base framing carries over; prompt finger self-dismisses in feed.gd
 		# PRINTING:  focus_frame + printing_overlay own this edge
 
 
@@ -78,17 +82,27 @@ func _set_level(level: int) -> void:
 	_level = level
 	_level_age = 0.0
 	if level == 0:
-		frame_host.to_bare_fullscreen()
+		_apply_framing(base_frame_scene)
 	else:
-		frame_host.show_frame(escalation_frames[level - 1])
+		_apply_framing(escalation_frames[level - 1])
+
+
+## Central framing switch — dedupes so re-entering a state doesn't re-crossfade
+## the frame that's already on screen. null = bare fullscreen.
+func _apply_framing(scene: PackedScene) -> void:
+	if scene == _shown_scene:
+		return
+	_shown_scene = scene
+	if scene:
+		frame_host.show_frame(scene)
+	else:
+		frame_host.to_bare_fullscreen()
 
 
 func _revert() -> void:
 	# StateMachine._on_enter() runs SessionData.reset() + ContentLibrary.reshuffle_order()
 	# before emitting state_changed, so Feed.reset() rebuilds from the fresh shuffle.
-	_level = 0
-	_level_age = 0.0
 	_feed.reset()
-	frame_host.to_bare_fullscreen()
+	_set_level(0)
 	await get_tree().create_timer(revert_settle_time).timeout
 	StateMachine.request_idle()
