@@ -1,14 +1,18 @@
 class_name PrintingOverlay
 extends Node
-## PRINTING flow: fill focus_frame's progress bar to 100%, THEN request the
-## horoscope; the result is printed to console (result_card comes later).
-## No thermal print job and no auto-revert for now — flip auto_revert on to
-## restore the REVERTING loop. request_printing() stays owned by focus_frame.
+## PRINTING flow: fill focus_frame's progress bar to 100%, request the
+## horoscope, then send text + artwork to the thermal printer via
+## ExternalBridge.request_print(). Reverts after the print settles when
+## auto_revert is on. Never dead-ends: a horoscope fallback still prints,
+## and a printer failure/timeout just logs and continues into REVERTING.
 
 @export var focus_frame: FocusFrame ## assign in main.tscn: FrameHost's FocusFrame instance
-@export var bar_fill_duration_sec: float = 3.0 ## how long the bar takes to fill before the request fires
-## Off: exhibit stays on the filled bar after the horoscope (current wish).
-## On: reverts to IDLE revert_delay_sec after the horoscope arrives.
+@export var bar_fill_duration_sec: float = 3.0 ## bar fill time before the horoscope request fires
+## Physical printout via ExternalBridge.request_print(). Off = console only,
+## useful when developing without the printer in BLE range.
+@export var physical_print: bool = true
+## On: revert to IDLE revert_delay_sec after the print (or horoscope, if
+## physical_print is off) settles. Off: exhibit stays on the filled bar.
 @export var auto_revert: bool = false
 @export var revert_delay_sec: float = 4.0
 
@@ -18,6 +22,7 @@ var _fill_tween: Tween
 func _ready() -> void:
 	StateMachine.state_changed.connect(_on_state_changed)
 	ExternalBridge.horoscope_ready.connect(_on_horoscope_ready)
+	ExternalBridge.print_finished.connect(_on_print_finished)
 
 
 func _on_state_changed(_previous: int, current: int) -> void:
@@ -48,6 +53,26 @@ func _on_horoscope_ready(text: String, was_fallback: bool) -> void:
 	SessionData.last_horoscope_text = text
 	var suffix := " (fallback)" if was_fallback else ""
 	print("PrintingOverlay: horoscope%s: %s" % [suffix, text])
-	if auto_revert:
-		await get_tree().create_timer(revert_delay_sec).timeout
+	if physical_print:
+		# Single composed job: print_job.py stacks the dithered artwork above
+		# the caption itself (design-doc.md §5).
+		var image_path: String = SessionData.current_artwork.get("_resolved_path", "")
+		ExternalBridge.request_print(text, image_path)
+	else:
+		_settle()
+
+
+func _on_print_finished(success: bool) -> void:
+	if StateMachine.state != StateMachine.STATE.PRINTING:
+		return
+	if not success:
+		push_warning("PrintingOverlay: print job failed/timed out — continuing without paper")
+	_settle()
+
+
+func _settle() -> void:
+	if not auto_revert:
+		return
+	await get_tree().create_timer(revert_delay_sec).timeout
+	if StateMachine.state == StateMachine.STATE.PRINTING:
 		StateMachine.request_revert()

@@ -77,7 +77,7 @@ func _resolve_content_base_path() -> void:
 		_content_base_path = exe_adjacent
 		print("ContentLibrary: using executable-adjacent content at '%s'" % exe_adjacent)
 	else:
-		_content_base_path = DEV_CONTENT_PATH
+		_content_base_path = ProjectSettings.globalize_path(DEV_CONTENT_PATH)
 		print("ContentLibrary: falling back to '%s' (running from editor)" % DEV_CONTENT_PATH)
 
 

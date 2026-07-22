@@ -11,7 +11,7 @@ signal horoscope_ready(text: String, was_fallback: bool)
 signal print_finished(success: bool)
 
 const HOROSCOPE_TIMEOUT_SEC := 12.0
-const PRINT_TIMEOUT_SEC := 20.0
+const PRINT_TIMEOUT_SEC := 60.0
 const FALLBACK_HOROSCOPES := [
 	"The stars are cloudy tonight, but you already know what you love.",
 	"Some things resist easy prophecy. Trust your first instinct instead.",
@@ -90,19 +90,18 @@ func request_print(text: String, image_path: String = "") -> void:
 		args.append("--image")
 		args.append(image_path)
 
-	var result := { "done": false, "success": false }
+	var result := { "done": false, "success": false, "output": "" }
 	var mutex := Mutex.new()
 
 	_print_thread = Thread.new()
 	_print_thread.start(_run_print_script.bind(args, result, mutex))
 
-	_await_with_timeout(
-		result,
-		mutex,
-		PRINT_TIMEOUT_SEC,
-		func(r):
-			print_finished.emit(r["success"])
-	)
+	var on_settled := func(r: Dictionary) -> void:
+		if not r["success"] and r["output"] != "":
+			push_warning("ExternalBridge: print job output:\n%s" % r["output"])
+		print_finished.emit(r["success"])
+
+	_await_with_timeout(result, mutex, PRINT_TIMEOUT_SEC, on_settled)
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +141,7 @@ func _run_print_script(args: PackedStringArray, result: Dictionary, mutex: Mutex
 
 	mutex.lock()
 	result["success"] = (exit_code == 0)
+	result["output"] = output[0] if not output.is_empty() else ""
 	result["done"] = true
 	mutex.unlock()
 
