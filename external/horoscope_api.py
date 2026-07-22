@@ -27,7 +27,8 @@ PROMPT_TEMPLATE = (
     "connection to a given painting. The painting's title is {title} by "
     "{artist} and it has the attributes {tags}. Return a very brief and "
     "compact assessment of the viewer that decided to give their full "
-    "attention to this painting, be funny, brief and playful. Only return "
+    "attention to this painting, be funny, brief and playful."
+    "Mention the fact that they chose to stare at this image for a while. Only return "
     "this assessment, no filler text, fluff or otherwise."
 )
 

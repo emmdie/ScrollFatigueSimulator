@@ -116,7 +116,7 @@ func _run_horoscope_script(args: PackedStringArray, result: Dictionary, mutex: M
 
 	mutex.lock()
 	if exit_code == 0 and not output.is_empty():
-		var parsed := _parse_json_text(output[0])
+		var parsed := _parse_json_text(_last_json_line(output[0]))
 		if parsed.has("text"):
 			result["text"] = str(parsed["text"])
 			result["success"] = true
